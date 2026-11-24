@@ -48,12 +48,13 @@ export default function Contact({ onNavigate }) {
         <a
           href="#home"
           className="logo"
+          aria-label="SCOOPY home"
           onClick={(event) => {
             event.preventDefault();
             onNavigate?.("home");
           }}
         >
-          SCOOPY<span>.</span>
+          <img src="/logo/logo.png" alt="" />
         </a>
         <p>A little scoop of happiness in every bite.</p>
         <small>© {new Date().getFullYear()} SCOOPY. A sweet preview, not a real shop.</small>

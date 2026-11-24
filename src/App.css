@@ -19,14 +19,17 @@
 }
 
 .logo {
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: -2px;
-  color: #542c37;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
 }
 
-.logo span {
-  color: #e76b89;
+.logo img {
+  display: block;
+  width: auto;
+  height: 54px;
+  max-width: 180px;
+  object-fit: contain;
 }
 
 .nav-links {
@@ -386,8 +389,8 @@
     padding: 0 5%;
   }
 
-  .logo {
-    font-size: 25px;
+  .logo img {
+    height: 44px;
   }
 
   .nav-links {

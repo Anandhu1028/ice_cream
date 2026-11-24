@@ -29,12 +29,13 @@ export default function Navbar({ active, onNavigate }) {
       <a
         href="#home"
         className="logo"
+        aria-label="SCOOPY home"
         onClick={(event) => {
           event.preventDefault();
           go("home");
         }}
       >
-        SCOOPY<span>.</span>
+        <img src="/logo/logo.png" alt="" />
       </a>
 
       <button
