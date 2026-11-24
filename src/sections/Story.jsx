@@ -1,165 +1,162 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 import { useGSAP } from "@gsap/react";
 import IceCreamCanvas from "../components/IceCreamCanvas";
-import Home from "./Home";
-import About from "./About";
-import Menu from "./Menu";
 import usePrefersReducedMotion from "../hooks/usePrefersReducedMotion";
-import { POSTERS, TOTAL_FRAMES, getSequencePlayer } from "../hooks/useImageSequence";
+import {
+  FRAME_COUNT,
+  POSTERS,
+  SEQUENCES,
+  STORY_DURATION,
+  frameAtTime,
+  frameSrc,
+  getSequencePlayer,
+} from "../hooks/useImageSequence";
+import {
+  navigateToStorySection,
+  setStorySequenceOrigin,
+} from "./storyNavigation";
 
-gsap.registerPlugin(ScrollTrigger, ScrollToPlugin, useGSAP);
+gsap.registerPlugin(ScrollTrigger, useGSAP);
 ScrollTrigger.config({ ignoreMobileResize: true });
 
-const STOPS = { home: 0, about: 0.42, menu: 0.78 };
+const INTRO_REVEAL_DURATION = 2.05;
+const INTRO_END_TIME = (SEQUENCES[0].duration * 3) / (FRAME_COUNT - 1);
 
-function sectionForProgress(progress) {
-  if (progress < 0.31) return "home";
-  if (progress < 0.64) return "about";
-  return "menu";
+const HERO1_VISIBLE_THROUGH = 45;
+const HERO1_HIDDEN_BY = 60;
+
+const HERO2_APPEAR_START = 75;
+const HERO2_VISIBLE_FROM = 83;
+const HERO2_VISIBLE_THROUGH = 190;
+const HERO2_HIDDEN_BY = 191;
+
+const HERO3_APPEAR_START = 66;
+const HERO3_VISIBLE_FROM = 74;
+
+function computeHero1Opacity(frame) {
+  if (frame <= HERO1_VISIBLE_THROUGH) return 1;
+  if (frame >= HERO1_HIDDEN_BY) return 0;
+  return (HERO1_HIDDEN_BY - frame) / (HERO1_HIDDEN_BY - HERO1_VISIBLE_THROUGH);
+}
+
+function computeHero2Opacity(frame) {
+  if (frame < HERO2_APPEAR_START || frame >= HERO2_HIDDEN_BY) return 0;
+  if (frame < HERO2_VISIBLE_FROM) {
+    return (frame - (HERO2_APPEAR_START - 1)) / (HERO2_VISIBLE_FROM - (HERO2_APPEAR_START - 1));
+  }
+  if (frame <= HERO2_VISIBLE_THROUGH) return 1;
+  return (HERO2_HIDDEN_BY - frame) / (HERO2_HIDDEN_BY - HERO2_VISIBLE_THROUGH);
+}
+
+function computeHero3Opacity(frame) {
+  if (frame < HERO3_APPEAR_START) return 0;
+  if (frame < HERO3_VISIBLE_FROM) {
+    return (frame - (HERO3_APPEAR_START - 1)) / (HERO3_VISIBLE_FROM - (HERO3_APPEAR_START - 1));
+  }
+  return 1;
 }
 
 export default function Story({
-  onActive,
-  onBootProgress,
   onBootDone,
-  registerNavigate,
-  filmMissing,
+  onBootProgress,
+  onIntroComplete,
   ready,
 }) {
   const reduced = usePrefersReducedMotion();
   const rootRef = useRef(null);
-  const homeRef = useRef(null);
-  const aboutRef = useRef(null);
-  const menuRef = useRef(null);
-  const extraRef = useRef(null);
-  const barRef = useRef(null);
-  const goRef = useRef(() => {});
-  const onActiveRef = useRef(onActive);
-  const activeRef = useRef("home");
-
-  useEffect(() => {
-    onActiveRef.current = onActive;
-  }, [onActive]);
-
-  const report = (id) => {
-    if (!id || activeRef.current === id) return;
-    activeRef.current = id;
-    onActiveRef.current(id);
-  };
+  const introRef = useRef(null);
+  const hero2Ref = useRef(null);
+  const hero3Ref = useRef(null);
+  const scrollProgressRef = useRef(0);
+  const sequenceOriginRef = useRef(0);
+  const introCompleteRef = useRef(false);
+  const finaleScene = SEQUENCES[SEQUENCES.length - 1];
 
   useEffect(() => {
     let live = true;
-    const player = getSequencePlayer();
-    player.preloadCritical((value) => {
-      if (live) onBootProgress(value);
-    }).then((result) => {
-      if (!live) return;
-      if (reduced) player.seek(119);
-      onBootDone(result);
+    getSequencePlayer().preloadCritical(onBootProgress).then(() => {
+      if (live) onBootDone();
     });
     return () => {
       live = false;
     };
-  }, [onBootDone, onBootProgress, reduced]);
+  }, [onBootDone, onBootProgress]);
 
-  useEffect(() => {
-    if (!reduced) return undefined;
+  useGSAP(() => {
+    const player = getSequencePlayer();
 
-    const go = (section) => {
-      const target = document.getElementById(section);
-      if (!target) return;
-      const top = target.getBoundingClientRect().top + window.scrollY;
-      gsap.to(window, {
-        scrollTo: Math.max(0, top),
-        duration: 0.9,
-        ease: "power2.inOut",
-        overwrite: "auto",
-      });
-    };
+    sequenceOriginRef.current = 0;
+    setStorySequenceOrigin(0, reduced);
+    if (reduced) {
+      introCompleteRef.current = true;
+      return undefined;
+    }
 
-    goRef.current = go;
-    registerNavigate(go);
+    introCompleteRef.current = false;
+    const introFrame = { time: 0 };
+    const timeline = gsap.timeline({
+      onComplete: () => {
+        const trigger = ScrollTrigger.getById("scoopy-story");
+        const origin = trigger?.progress ?? scrollProgressRef.current;
+        sequenceOriginRef.current = origin;
+        introCompleteRef.current = true;
+        setStorySequenceOrigin(origin);
+        player.seek(INTRO_END_TIME);
+        onIntroComplete?.();
+      },
+    });
 
-    const onScroll = () => {
-      const line = window.innerHeight * 0.35;
-      const order = ["contact", "menu", "about", "home"];
-      for (const id of order) {
-        const element = document.getElementById(id);
-        if (!element) continue;
-        const rect = element.getBoundingClientRect();
-        if (rect.top <= line && rect.bottom > line) {
-          report(id);
-          return;
-        }
-      }
-    };
+    timeline.to(introFrame, {
+      time: INTRO_END_TIME,
+      duration: INTRO_REVEAL_DURATION,
+      ease: "none",
+      onUpdate: () => player.seek(introFrame.time),
+    }, 0);
 
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      registerNavigate(() => {});
+      introCompleteRef.current = false;
     };
-  }, [reduced, registerNavigate]);
+  }, {
+    scope: rootRef,
+    dependencies: [reduced, onIntroComplete],
+    revertOnUpdate: true,
+  });
 
   useGSAP(() => {
     if (reduced || !ready || !rootRef.current) return undefined;
 
     const player = getSequencePlayer();
-    const about = aboutRef.current;
-    const menu = menuRef.current;
-    const canvasLayer = rootRef.current.querySelector(".story-canvas");
-    const pillars = about.querySelectorAll(".pillar");
-    const cards = menu.querySelectorAll(".flavour-card");
-    const aboutCopy = about.querySelectorAll(".eyebrow, h2, .about-sheet > p");
-    const menuCopy = menu.querySelectorAll(".eyebrow, h2, .menu-note");
-    const playhead = { frame: 0 };
+    const playhead = { position: 0 };
+    const setIntroOpacity = gsap.quickSetter(introRef.current, "opacity");
+    const setHero2Opacity = gsap.quickSetter(hero2Ref.current, "opacity");
+    const setHero3Opacity = gsap.quickSetter(hero3Ref.current, "opacity");
 
-    const intro = gsap.timeline({
-      defaults: { ease: "power3.out" },
-    });
-    intro
-      .from(homeRef.current.querySelector(".eyebrow"), {
-        autoAlpha: 0,
-        y: 12,
-        duration: 0.6,
-      })
-      .from(homeRef.current.querySelectorAll(".hero-word"), {
-        autoAlpha: 0,
-        yPercent: 45,
-        duration: 0.75,
-        stagger: 0.12,
-      }, 0.08)
-      .from(homeRef.current.querySelector(".hero-content > p"), {
-        autoAlpha: 0,
-        y: 16,
-        duration: 0.6,
-      }, 0.38)
-      .from(homeRef.current.querySelector(".hero-buttons"), {
-        autoAlpha: 0,
-        y: 12,
-        duration: 0.55,
-      }, 0.52)
-      .from(homeRef.current.querySelector(".hero-caption"), {
-        autoAlpha: 0,
-        y: 8,
-        duration: 0.45,
-      }, 0.66);
+    gsap.set([hero2Ref.current, hero3Ref.current], { opacity: 0, visibility: "hidden" });
+    gsap.set(introRef.current, { opacity: 1, visibility: "visible" });
 
-    const sync = (progress) => {
-      if (barRef.current) barRef.current.style.transform = `scaleX(${progress})`;
-      report(sectionForProgress(progress));
+    const syncTextOverlays = (time) => {
+      const hero1Frame = frameAtTime(SEQUENCES[0], time);
+      const hero2Frame = frameAtTime(SEQUENCES[1], time);
+      const hero3Frame = frameAtTime(SEQUENCES[2], time);
+
+      const hero1Opacity = computeHero1Opacity(hero1Frame);
+      setIntroOpacity(hero1Opacity);
+      introRef.current.style.visibility = hero1Opacity === 0 ? "hidden" : "visible";
+      const hero2Opacity =
+        time >= SEQUENCES[1].start && time <= SEQUENCES[1].start + SEQUENCES[1].duration
+          ? computeHero2Opacity(hero2Frame)
+          : 0;
+      setHero2Opacity(hero2Opacity);
+      hero2Ref.current.style.visibility = hero2Opacity === 0 ? "hidden" : "visible";
+
+      const hero3Opacity = time >= SEQUENCES[2].start
+        ? computeHero3Opacity(hero3Frame)
+        : 0;
+      setHero3Opacity(hero3Opacity);
+      hero3Ref.current.style.visibility = hero3Opacity === 0 ? "hidden" : "visible";
     };
-
-    gsap.set(about, { autoAlpha: 0, y: 36 });
-    gsap.set(menu, { autoAlpha: 0, y: 36 });
-    gsap.set(aboutCopy, { autoAlpha: 0, y: 12 });
-    gsap.set(menuCopy, { autoAlpha: 0, y: 12 });
-    gsap.set(pillars, { autoAlpha: 0, y: 18 });
-    gsap.set(cards, { autoAlpha: 0, y: 14 });
 
     const timeline = gsap.timeline({
       defaults: { ease: "none" },
@@ -167,184 +164,151 @@ export default function Story({
         id: "scoopy-story",
         trigger: rootRef.current,
         start: "top top",
-        end: "+=480%",
+        end: () => (window.innerWidth <= 760 ? "+=420%" : "+=560%"),
         pin: true,
-        scrub: 0.25,
+        scrub: true,
         anticipatePin: 1,
         invalidateOnRefresh: true,
-        onUpdate: (self) => {
-          if (!self.isActive) return;
-          sync(self.progress);
-        },
-        onLeave: () => report("contact"),
-        onLeaveBack: () => report("home"),
-        onEnterBack: (self) => sync(self.progress),
       },
     });
 
     timeline.to(playhead, {
-      frame: TOTAL_FRAMES - 1,
-      duration: 1,
-      onUpdate: () => player.seek(playhead.frame),
+      position: 1,
+      duration: STORY_DURATION,
+      onUpdate: () => {
+        const rawProgress = playhead.position;
+        scrollProgressRef.current = rawProgress;
+        if (!introCompleteRef.current) return;
+
+        const origin = sequenceOriginRef.current;
+        const progress = origin >= 1
+          ? 0
+          : Math.max(0, Math.min(1, (rawProgress - origin) / (1 - origin)));
+        const time = INTRO_END_TIME + progress * (STORY_DURATION - INTRO_END_TIME);
+        player.seek(time);
+        syncTextOverlays(time);
+      },
     }, 0);
 
-    timeline.to(homeRef.current, {
-      autoAlpha: 0,
-      y: -28,
-      duration: 0.05,
-      ease: "power1.inOut",
-    }, 0.27);
-    timeline.to(extraRef.current, { autoAlpha: 0, duration: 0.04 }, 0.26);
-
-    timeline.to(about, { autoAlpha: 1, y: 0, duration: 0.05, ease: "power1.inOut" }, 0.3);
-    timeline.to(aboutCopy, {
-      autoAlpha: 1,
-      y: 0,
-      duration: 0.025,
-      stagger: 0.014,
-      ease: "power1.out",
-    }, 0.32);
-    timeline.to(pillars, {
-      autoAlpha: 1,
-      y: 0,
-      duration: 0.04,
-      stagger: 0.014,
-      ease: "power1.out",
-    }, 0.36);
-    timeline.to(about, { autoAlpha: 0, y: -28, duration: 0.045, ease: "power1.inOut" }, 0.59);
-
-    timeline.to(menu, { autoAlpha: 1, y: 0, duration: 0.05, ease: "power1.inOut" }, 0.63);
-    timeline.to(menuCopy, {
-      autoAlpha: 1,
-      y: 0,
-      duration: 0.025,
-      stagger: 0.014,
-      ease: "power1.out",
-    }, 0.65);
-    timeline.to(cards, {
-      autoAlpha: 1,
-      y: 0,
-      duration: 0.04,
-      stagger: 0.012,
-      ease: "power1.out",
-    }, 0.69);
-    timeline.to(canvasLayer, {
-      autoAlpha: 0.42,
-      scale: 1.015,
-      duration: 0.06,
-      ease: "power1.in",
-    }, 0.94);
-
-    const go = (section) => {
-      const trigger = timeline.scrollTrigger;
-      if (section === "contact") {
-        gsap.to(window, {
-          scrollTo: { y: "#contact", offsetY: 0 },
-          duration: 1.05,
-          ease: "power2.inOut",
-          overwrite: "auto",
-        });
-        return;
-      }
-      const stop = STOPS[section];
-      if (!trigger || stop == null) return;
-      const y = trigger.start + (trigger.end - trigger.start) * stop;
-      gsap.to(window, {
-        scrollTo: y,
-        duration: 1.05,
-        ease: "power2.inOut",
-        overwrite: "auto",
-      });
-    };
-
-    goRef.current = go;
-    registerNavigate(go);
     let active = true;
-    document.fonts?.ready.then(() => {
-      if (active) ScrollTrigger.refresh();
-    });
+    let resizeTimer = 0;
+    let previousWidth = window.innerWidth;
+    const refreshAtNewWidth = () => {
+      if (window.innerWidth === previousWidth) return;
+      previousWidth = window.innerWidth;
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        if (active) ScrollTrigger.refresh();
+      }, 150);
+    };
+    window.addEventListener("resize", refreshAtNewWidth, { passive: true });
 
     return () => {
       active = false;
-      registerNavigate(() => {});
+      window.clearTimeout(resizeTimer);
+      window.removeEventListener("resize", refreshAtNewWidth);
     };
   }, {
     scope: rootRef,
-    dependencies: [reduced, ready, registerNavigate],
+    dependencies: [reduced, ready],
     revertOnUpdate: true,
   });
 
-  const openMenu = () => goRef.current("menu");
-  const openAbout = () => goRef.current("about");
-
-  if (reduced) {
-    return (
-      <>
-        <section className="home-section" id="home">
-          <Home onExplore={openMenu} onStory={openAbout} />
-          <div className="hero-visual">
-            <img
-              src={POSTERS.home}
-              alt="Strawberry ice cream cone with fresh berries"
-              className="hero-icecream"
-            />
-            <div className="image-label">
-              <span>OUR SIGNATURE</span>
-              <strong>Strawberry Dream</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="flow-section" id="about">
-          <About />
-          <img src={POSTERS.about} alt="Strawberry cone beside vanilla and chocolate scoops" />
-        </section>
-
-        <section className="flow-section menu-flow" id="menu">
-          <Menu />
-          <img src={POSTERS.menu} alt="Strawberry, vanilla and chocolate scoops on a pink splash" />
-        </section>
-      </>
-    );
-  }
-
   return (
-    <section className="story-sticky" id="story" ref={rootRef} aria-label="Scoopy scroll film">
-      <div className="story-progress" aria-hidden="true">
-        <span ref={barRef} />
-      </div>
-
-      <div className="story-canvas" role="img" aria-label="Scroll-driven strawberry ice cream film">
-        <IceCreamCanvas />
-        {filmMissing && (
-          <p className="film-warning">
-            The ice cream film could not be loaded. Refresh to try the frames again.
-          </p>
-        )}
-      </div>
-
-      <div className="story-layers">
-        <div className="story-copy home-layer" id="home" ref={homeRef}>
-          <Home onExplore={openMenu} onStory={openAbout} />
+    <>
+      <section className={`story-sticky${reduced ? " is-reduced" : ""}`} ref={rootRef}>
+        <div className="story-canvas" aria-hidden="true">
+          {reduced && (
+            <img className="hero-intro__poster" src={frameSrc("hero", 1)} alt="" />
+          )}
+          <IceCreamCanvas />
         </div>
-        <div className="story-copy about-layer" id="about" ref={aboutRef}>
-          <About />
+        <div className="hero-intro" ref={introRef}>
+          <div className="hero-intro__content">
+            <p className="hero-intro__label">THE ART OF ICE CREAM</p>
+            <h1 className="hero-intro__heading">
+              <span className="hero-intro__heading-line">
+                <span className="hero-intro__line">A Little Scoop</span>
+              </span>
+              <span className="hero-intro__heading-line">
+                <span className="hero-intro__line">Of Happiness.</span>
+              </span>
+            </h1>
+            <p className="hero-intro__support">
+              Discover the joy of creamy flavours, fresh ingredients and
+              unforgettable moments.
+            </p>
+            <a
+              className="hero-intro__cta"
+              href="#menu"
+              onClick={(event) => {
+                event.preventDefault();
+                navigateToStorySection("menu");
+              }}
+            >
+              Explore Our Flavours
+            </a>
+          </div>
         </div>
-        <div className="story-copy menu-layer" id="menu" ref={menuRef}>
-          <Menu />
+        <div
+          className="scene-overlay scene-overlay--chocolate"
+          ref={hero2Ref}
+          aria-hidden={reduced}
+        >
+          <div className="scene-overlay__content">
+            <p className="scene-overlay__label">A MOMENT OF INDULGENCE</p>
+            <h2 className="scene-overlay__heading">
+              <span className="scene-overlay__line">Richness in</span>
+              <span className="scene-overlay__line">Every Scoop.</span>
+            </h2>
+            <p className="scene-overlay__support">
+              Deep chocolate, silky textures and irresistible moments of pure
+              indulgence.
+            </p>
+          </div>
         </div>
-      </div>
-
-      <div className="home-extra" ref={extraRef}>
-        <div className="image-label">
-          <span>OUR SIGNATURE</span>
-          <strong>Strawberry Dream</strong>
+        <div
+          className="scene-overlay scene-overlay--vanilla"
+          ref={hero3Ref}
+          aria-hidden={reduced}
+        >
+          <div className="scene-overlay__content">
+            <p className="scene-overlay__label">PURE AND TIMELESS</p>
+            <h2 className="scene-overlay__heading">
+              <span className="scene-overlay__line">Simply</span>
+              <span className="scene-overlay__line">Vanilla.</span>
+            </h2>
+            <p className="scene-overlay__support">
+              A timeless classic, crafted for moments worth savouring.
+            </p>
+          </div>
         </div>
-        <div className="scroll-indicator">
-          <span>SCROLL TO DISCOVER</span>
-          <span className="scroll-arrow">↓</span>
+      </section>
+      {reduced ? (
+        <div className="still-film" aria-hidden="true">
+          {SEQUENCES.map((scene) => (
+            <section
+              className="still-scene"
+              key={scene.id}
+              style={{ backgroundColor: scene.background }}
+            >
+              <img
+                src={POSTERS[scene.id]}
+                alt=""
+                style={{ objectPosition: `${scene.focalX * 100}% center` }}
+              />
+            </section>
+          ))}
         </div>
-      </div>
-    </section>
+      ) : (
+        <div className="film-finale" aria-hidden="true">
+          <img
+            src={frameSrc(finaleScene.folder, FRAME_COUNT)}
+            alt=""
+            style={{ objectPosition: `${finaleScene.focalX * 100}% center` }}
+          />
+        </div>
+      )}
+    </>
   );
 }

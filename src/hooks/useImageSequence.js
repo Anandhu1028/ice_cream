@@ -1,31 +1,19 @@
 import { useEffect } from "react";
 
-/**
- * Scroll film for the three SCOOPY sequences.
- *
- * Files are 1280×720 PNGs and often 0.6–1.2MB each, so the player keeps a
- * small decoded cache and preloads only the frames around the playhead.
- * Quality stays at the original resolution.
- *
- * If these files ever need to weigh less, convert them offline to WebP at
- * quality 90 and keep this exact naming. Do not scale them below 1280×720 —
- * the canvas is already capped so a laptop is not asked to decode all 570.
- */
-
 export const FRAME_COUNT = 190;
 
 export const SEQUENCES = [
-  { id: "hero", folder: "hero" },
-  { id: "hero2", folder: "hero2" },
-  { id: "hero3", folder: "hero3" },
+  { id: "hero", folder: "hero", start: 0, duration: 1.08, background: "#d8a2ac", rgb: [216, 162, 172], focalX: 0.62 },
+  { id: "hero2", folder: "hero2", start: 0.96, duration: 1.1, background: "#4b281e", rgb: [75, 40, 30], focalX: 0.26 },
+  { id: "hero3", folder: "hero3", start: 1.94, duration: 1.06, background: "#efe2c7", rgb: [239, 226, 199], focalX: 0.77 },
 ];
 
-export const TOTAL_FRAMES = SEQUENCES.length * FRAME_COUNT;
+export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start + scene.duration));
 
-const MAX_CACHE = 20;
+const MAX_CACHE = 14;
 const MAX_INFLIGHT = 3;
-const PRELOAD_AHEAD = 8;
-const PRELOAD_BEHIND = 3;
+const PRELOAD_AHEAD = 4;
+const PRELOAD_BEHIND = 1;
 
 const cache = new Map();
 const failed = new Set();
@@ -36,26 +24,47 @@ export function frameSrc(folder, frame) {
   return `/frames/${folder}/frame_${String(frame).padStart(6, "0")}.png`;
 }
 
-export function resolveFrame(globalIndex) {
-  const index = Math.max(
-    0,
-    Math.min(TOTAL_FRAMES - 1, Math.round(Number(globalIndex) || 0))
-  );
-  const scene = Math.floor(index / FRAME_COUNT);
-  const frame = index - scene * FRAME_COUNT + 1;
-  return {
-    index,
-    scene,
-    folder: SEQUENCES[scene].folder,
-    frame,
-  };
+function optimizedFrameSrc(folder, frame) {
+  return `/frames-webp/${folder}/frame_${String(frame).padStart(6, "0")}.webp`;
 }
 
 export const POSTERS = {
-  home: frameSrc("hero", 120),
-  about: frameSrc("hero2", 100),
-  menu: frameSrc("hero3", 20),
+  hero: frameSrc("hero", 120),
+  hero2: frameSrc("hero2", 100),
+  hero3: frameSrc("hero3", 20),
 };
+
+export function frameAtTime(scene, time) {
+  const progress = Math.max(0, Math.min(1, (time - scene.start) / scene.duration));
+  return Math.round(progress * (FRAME_COUNT - 1)) + 1;
+}
+
+function samplesAtTime(time) {
+  const boundedTime = Math.max(0, Math.min(STORY_DURATION, time));
+
+  for (let index = 0; index < SEQUENCES.length - 1; index += 1) {
+    const previous = SEQUENCES[index];
+    const next = SEQUENCES[index + 1];
+    const transitionStart = next.start;
+    const transitionEnd = previous.start + previous.duration;
+
+    if (boundedTime >= transitionStart && boundedTime <= transitionEnd) {
+      return {
+        samples: [
+          { scene: previous, frame: frameAtTime(previous, boundedTime) },
+          { scene: next, frame: frameAtTime(next, boundedTime) },
+        ],
+        mix: (boundedTime - transitionStart) / (transitionEnd - transitionStart),
+      };
+    }
+  }
+
+  let scene = SEQUENCES[0];
+  for (const candidate of SEQUENCES) {
+    if (boundedTime >= candidate.start) scene = candidate;
+  }
+  return { samples: [{ scene, frame: frameAtTime(scene, boundedTime) }], mix: 0 };
+}
 
 function createSequencePlayer() {
   const inflight = new Map();
@@ -64,12 +73,15 @@ function createSequencePlayer() {
   let canvas = null;
   let ctx = null;
   let attached = false;
-  let current = resolveFrame(0);
-  let lastSeekIndex = -1;
+  let current = samplesAtTime(0);
+  let currentTime = 0;
+  let lastSeekTime = -1;
   let lastPaintKey = "";
+  let lastPaintScene = "";
+  let lastPreloadSignature = "";
   let lastGood = null;
   let raf = 0;
-  let pendingFrame = null;
+  let pendingTime = null;
   let direction = 1;
 
   function touch(key) {
@@ -80,9 +92,11 @@ function createSequencePlayer() {
 
   function protectedKeys() {
     const keys = new Set();
-    for (let delta = -PRELOAD_BEHIND; delta <= PRELOAD_AHEAD; delta += 1) {
-      const spec = resolveFrame(current.index + delta);
-      keys.add(`${spec.folder}:${spec.frame}`);
+    for (const sample of current.samples) {
+      for (let delta = -PRELOAD_BEHIND; delta <= PRELOAD_AHEAD; delta += 1) {
+        const frame = Math.max(1, Math.min(FRAME_COUNT, sample.frame + direction * delta));
+        keys.add(`${sample.scene.folder}:${frame}`);
+      }
     }
     return keys;
   }
@@ -110,74 +124,110 @@ function createSequencePlayer() {
     return { img, key };
   }
 
-  function nearestImage(spec) {
-    const exact = readCached(spec.folder, spec.frame);
+  function nearestImage(sample) {
+    const exact = readCached(sample.scene.folder, sample.frame);
     if (exact) return exact;
 
-    for (let distance = 1; distance < FRAME_COUNT; distance += 1) {
-      const before = spec.frame - distance;
-      const after = spec.frame + distance;
+    for (let distance = 1; distance <= MAX_CACHE; distance += 1) {
+      const before = sample.frame - distance;
+      const after = sample.frame + distance;
       if (before >= 1) {
-        const img = readCached(spec.folder, before);
+        const img = readCached(sample.scene.folder, before);
         if (img) return img;
       }
       if (after <= FRAME_COUNT) {
-        const img = readCached(spec.folder, after);
+        const img = readCached(sample.scene.folder, after);
         if (img) return img;
       }
     }
-
-    if (spec.scene > 0) {
-      const previous = SEQUENCES[spec.scene - 1].folder;
-      const bridge = readCached(previous, FRAME_COUNT) || readCached(previous, FRAME_COUNT - 1);
-      if (bridge) return bridge;
-    }
-
     return null;
   }
 
-  function drawContained(img) {
+  function drawCover(img, scene) {
     const width = canvas.width;
     const height = canvas.height;
-    const imageRatio = img.naturalWidth / img.naturalHeight;
-    const canvasRatio = width / height;
-    let drawWidth;
-    let drawHeight;
+    const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight);
+    const drawWidth = img.naturalWidth * scale;
+    const drawHeight = img.naturalHeight * scale;
+    const dx = (width - drawWidth) * scene.focalX;
+    const dy = (height - drawHeight) * 0.5;
 
-    if (canvasRatio > imageRatio) {
-      drawHeight = height;
-      drawWidth = height * imageRatio;
-    } else {
-      drawWidth = width;
-      drawHeight = width / imageRatio;
-    }
-
-    const dx = (width - drawWidth) * 0.62;
-    const verticalAlignment = canvasRatio < 0.75 ? 0.08 : 0.5;
-    const dy = (height - drawHeight) * verticalAlignment;
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#f6c3d2";
-    ctx.fillRect(0, 0, width, height);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
     ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
+  }
+
+  function mixColor(from, to, amount) {
+    const channels = from.rgb.map((value, index) =>
+      Math.round(value + (to.rgb[index] - value) * amount)
+    );
+    return `rgb(${channels.join(",")})`;
+  }
+
+  function requestPaint() {
+    if (attached && !raf) raf = requestAnimationFrame(flushSeek);
   }
 
   function paint() {
     if (!attached || !ctx || !canvas) return;
-    const found = nearestImage(current);
-    const img = found?.img || lastGood;
-    if (!img) {
-      ctx.fillStyle = "#f6c3d2";
+
+    const resolved = current.samples.map((sample) => ({
+      sample,
+      found: nearestImage(sample),
+    }));
+    const transition = resolved.length === 2 && current.mix > 0 && current.mix < 1;
+    const activeIndex = resolved.length === 2 && current.mix >= 1 ? 1 : 0;
+    const visible = transition ? resolved : [resolved[activeIndex]];
+    const missing = visible.some(({ found }) => !found);
+
+    if (missing) {
+      if (!lastGood) {
+        ctx.fillStyle = current.samples[activeIndex].scene.background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        lastPaintScene = current.samples[activeIndex].scene.folder;
+        return;
+      }
+      if (lastGood.key === lastPaintKey) return;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = lastGood.sample.scene.background;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawCover(lastGood.img, lastGood.sample.scene);
+      lastPaintKey = lastGood.key;
+      lastPaintScene = lastGood.sample.scene.folder;
       return;
     }
-    const key = found?.key || "last";
-    if (key === lastPaintKey) return;
-    drawContained(img);
-    lastGood = img;
-    lastPaintKey = key;
+
+    if (transition) {
+      const first = resolved[0].found;
+      const second = resolved[1].found;
+      const paintKey = `${first.key}|${second.key}|${Math.round(current.mix * 1000)}`;
+      if (paintKey === lastPaintKey) return;
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = mixColor(resolved[0].sample.scene, resolved[1].sample.scene, current.mix);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+      drawCover(first.img, resolved[0].sample.scene);
+      ctx.globalAlpha = current.mix;
+      drawCover(second.img, resolved[1].sample.scene);
+      lastGood = {
+        sample: resolved[current.mix >= 0.5 ? 1 : 0].sample,
+        ...(current.mix >= 0.5 ? second : first),
+      };
+      lastPaintScene = "";
+      lastPaintKey = paintKey;
+    } else {
+      const { sample, found } = resolved[activeIndex];
+      if (found.key === lastPaintKey) return;
+      if (lastPaintScene !== sample.scene.folder) {
+        ctx.fillStyle = sample.scene.background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.globalAlpha = 1;
+      drawCover(found.img, sample.scene);
+      lastGood = { sample, ...found };
+      lastPaintScene = sample.scene.folder;
+      lastPaintKey = found.key;
+    }
+    ctx.globalAlpha = 1;
   }
 
   function pump() {
@@ -195,40 +245,49 @@ function createSequencePlayer() {
       img.decoding = "async";
       if (job.priority <= 2 && "fetchPriority" in img) img.fetchPriority = "high";
 
-      img.onload = () => {
-        const commit = () => {
-          if (!img.naturalWidth) {
-            failed.add(job.key);
-            inflight.delete(job.key);
-            job.resolve(null);
-            pump();
-            return;
-          }
-          cache.set(job.key, img);
-          touch(job.key);
-          inflight.delete(job.key);
-          evict();
-          paint();
-          job.resolve(img);
-          pump();
-        };
-        if (typeof img.decode === "function") img.decode().then(commit).catch(commit);
-        else commit();
-      };
-
-      img.onerror = () => {
+      let usingPngFallback = false;
+      const fail = () => {
         failed.add(job.key);
         inflight.delete(job.key);
         if (!warned.has(job.key)) {
           warned.add(job.key);
-          console.warn(`Missing animation frame ${job.folder}/frame_${String(job.frame).padStart(6, "0")}.png`);
+          console.warn(
+            `Missing animation frame ${job.folder}/frame_${String(job.frame).padStart(6, "0")}.webp and PNG fallback`
+          );
         }
-        paint();
+        requestPaint();
         job.resolve(null);
         pump();
       };
+      const fallbackToPng = () => {
+        if (usingPngFallback) {
+          fail();
+          return;
+        }
+        usingPngFallback = true;
+        img.src = frameSrc(job.folder, job.frame);
+      };
+      const commit = () => {
+        if (!img.naturalWidth) {
+          fallbackToPng();
+          return;
+        }
+        cache.set(job.key, img);
+        touch(job.key);
+        inflight.delete(job.key);
+        evict();
+        requestPaint();
+        job.resolve(img);
+        pump();
+      };
 
-      img.src = frameSrc(job.folder, job.frame);
+      img.onload = () => {
+        if (typeof img.decode === "function") {
+          img.decode().then(commit).catch(fallbackToPng);
+        } else commit();
+      };
+      img.onerror = fallbackToPng;
+      img.src = optimizedFrameSrc(job.folder, job.frame);
     }
   }
 
@@ -258,37 +317,81 @@ function createSequencePlayer() {
     return promise;
   }
 
-  function preloadAround(spec) {
-    requestFrame(spec.folder, spec.frame, 0);
-    for (let step = 1; step <= PRELOAD_AHEAD; step += 1) {
-      const ahead = resolveFrame(spec.index + direction * step);
-      requestFrame(ahead.folder, ahead.frame, step);
+  function preloadAround(time, state) {
+    const targets = new Map();
+    const addTarget = (folder, frame, priority) => {
+      const key = `${folder}:${frame}`;
+      const currentPriority = targets.get(key);
+      if (currentPriority == null || priority < currentPriority) {
+        targets.set(key, priority);
+      }
+    };
+
+    for (const sample of state.samples) {
+      addTarget(sample.scene.folder, sample.frame, 0);
+      for (let step = 1; step <= PRELOAD_AHEAD; step += 1) {
+        const frame = sample.frame + direction * step;
+        if (frame >= 1 && frame <= FRAME_COUNT) {
+          addTarget(sample.scene.folder, frame, step);
+        }
+      }
+      for (let step = 1; step <= PRELOAD_BEHIND; step += 1) {
+        const frame = sample.frame - direction * step;
+        if (frame >= 1 && frame <= FRAME_COUNT) {
+          addTarget(sample.scene.folder, frame, PRELOAD_AHEAD + step);
+        }
+      }
     }
-    for (let step = 1; step <= PRELOAD_BEHIND; step += 1) {
-      const behind = resolveFrame(spec.index - direction * step);
-      requestFrame(behind.folder, behind.frame, PRELOAD_AHEAD + step);
+
+    for (let index = 0; index < SEQUENCES.length - 1; index += 1) {
+      const scene = SEQUENCES[index];
+      if (time >= scene.start + scene.duration * 0.72 && time < SEQUENCES[index + 1].start) {
+        for (let frame = 1; frame <= 6; frame += 1) {
+          addTarget(SEQUENCES[index + 1].folder, frame, PRELOAD_AHEAD + PRELOAD_BEHIND + frame);
+        }
+      }
     }
-    if (spec.frame >= FRAME_COUNT - 18 && spec.scene < SEQUENCES.length - 1) {
-      const next = resolveFrame((spec.scene + 1) * FRAME_COUNT);
-      requestFrame(next.folder, next.frame, 2);
+
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      const job = queue[index];
+      if (!targets.has(job.key)) {
+        queue.splice(index, 1);
+        job.resolve(null);
+      } else {
+        job.priority = targets.get(job.key);
+      }
+    }
+
+    for (const [key, priority] of targets) {
+      const separator = key.lastIndexOf(":");
+      requestFrame(key.slice(0, separator), Number(key.slice(separator + 1)), priority);
     }
   }
 
   function flushSeek() {
     raf = 0;
-    if (pendingFrame == null) return;
-    const spec = resolveFrame(pendingFrame);
-    pendingFrame = null;
-    if (spec.index === lastSeekIndex) return;
-    direction = spec.index >= lastSeekIndex ? 1 : -1;
-    lastSeekIndex = spec.index;
-    current = spec;
-    preloadAround(spec);
+    if (pendingTime != null) {
+      const time = Math.max(0, Math.min(STORY_DURATION, pendingTime));
+      pendingTime = null;
+      if (time !== lastSeekTime) {
+        direction = time >= lastSeekTime ? 1 : -1;
+        lastSeekTime = time;
+        currentTime = time;
+        current = samplesAtTime(time);
+        const signature = `${direction}:${current.samples
+          .map(({ scene, frame }) => `${scene.folder}:${frame}`)
+          .join("|")}`;
+        if (signature !== lastPreloadSignature) {
+          lastPreloadSignature = signature;
+          preloadAround(time, current);
+        }
+      }
+    }
     paint();
   }
 
-  function seek(globalFrame) {
-    pendingFrame = globalFrame;
+  function seek(time) {
+    pendingTime = time;
     if (!raf) raf = requestAnimationFrame(flushSeek);
   }
 
@@ -312,57 +415,72 @@ function createSequencePlayer() {
       canvas.width = width;
       canvas.height = height;
       lastPaintKey = "";
+      lastPaintScene = "";
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
     }
     paint();
   }
 
   function attach(nextCanvas) {
     canvas = nextCanvas;
-    ctx = nextCanvas.getContext("2d", { alpha: false });
+    ctx = nextCanvas.getContext("2d", { alpha: false, desynchronized: true });
     attached = true;
     resize();
+    seek(currentTime);
   }
 
   function detach() {
     attached = false;
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
+    pendingTime = null;
     canvas = null;
     ctx = null;
   }
 
-  function preloadCritical(onProgress) {
-    const frames = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let done = 0;
-    const tasks = frames.map((frame, index) =>
-      requestFrame("hero", frame, index).then((img) => {
-        done += 1;
-        onProgress?.(done / frames.length);
+  function preloadCritical(onProgress = () => {}) {
+    const targets = [1, 2, 3].map((frame) => ({ folder: "hero", frame }));
+    let settled = 0;
+    let loaded = 0;
+    let timedOut = false;
+    const reportProgress = () => {
+      onProgress(timedOut ? 1 : settled / targets.length);
+    };
+    const tasks = targets.map(({ folder, frame }, index) =>
+      requestFrame(folder, frame, index).then((img) => {
+        settled += 1;
+        if (img) loaded += 1;
+        reportProgress();
         return img;
       })
     );
     let timeoutId;
     const timeout = new Promise((resolve) => {
-      timeoutId = window.setTimeout(() => resolve("timeout"), 12000);
+      timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        reportProgress();
+        resolve("timeout");
+      }, 12000);
     });
 
-    return Promise.race([Promise.all(tasks), timeout]).then((value) => {
-      const loaded = Array.isArray(value) ? value.filter(Boolean).length : done;
-      requestFrame("hero2", 1, 4);
-      requestFrame("hero3", 1, 5);
-      for (let frame = 11; frame <= 22; frame += 1) requestFrame("hero", frame, 14);
-      seek(current.index);
-      return { loaded };
-    }).finally(() => window.clearTimeout(timeoutId));
+    return Promise.race([Promise.all(tasks), timeout])
+      .then((value) => {
+        if (value === "timeout") {
+          console.warn("Critical hero frames timed out; continuing with available frames.");
+        } else {
+          reportProgress();
+        }
+        for (let frame = 4; frame <= 8; frame += 1) {
+          requestFrame("hero", frame, 14);
+        }
+        seek(currentTime);
+        return { loaded, total: targets.length, timedOut };
+      })
+      .finally(() => window.clearTimeout(timeoutId));
   }
 
-  return {
-    attach,
-    detach,
-    resize,
-    seek,
-    preloadCritical,
-  };
+  return { attach, detach, resize, seek, preloadCritical };
 }
 
 let singleton;
@@ -382,13 +500,22 @@ export function useImageSequence(canvasRef, enabled = true) {
 
     player.attach(canvas);
     const parent = canvas.parentElement;
-    const observer = new ResizeObserver(() => player.resize());
+    let resizeRaf = 0;
+    const scheduleResize = () => {
+      if (resizeRaf) return;
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        player.resize();
+      });
+    };
+    const observer = new ResizeObserver(scheduleResize);
     if (parent) observer.observe(parent);
-    window.addEventListener("resize", player.resize);
+    window.addEventListener("resize", scheduleResize, { passive: true });
 
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", player.resize);
+      window.removeEventListener("resize", scheduleResize);
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
       player.detach();
     };
   }, [canvasRef, enabled, player]);

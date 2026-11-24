@@ -7,7 +7,7 @@ const LINKS = [
   { id: "contact", label: "Contact" },
 ];
 
-export default function Navbar({ active, onNavigate }) {
+export default function Navbar({ active, theme, background, onNavigate }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -24,8 +24,14 @@ export default function Navbar({ active, onNavigate }) {
     onNavigate(id);
   };
 
+  const navTheme = theme ?? (active === "about" ? "dark" : "light");
+
   return (
-    <header className="navbar">
+    <header
+      className="navbar"
+      data-theme={navTheme}
+      data-background={background ? "solid" : "transparent"}
+    >
       <a
         href="#home"
         className="logo"
@@ -51,7 +57,11 @@ export default function Navbar({ active, onNavigate }) {
         <span />
       </button>
 
-      <nav id="site-nav" className={`nav-links ${open ? "open" : ""}`}>
+      <nav
+        id="site-nav"
+        className={`nav-links ${open ? "open" : ""}`}
+        aria-label="Primary navigation"
+      >
         {LINKS.map((link) => (
           <a
             key={link.id}
@@ -67,17 +77,6 @@ export default function Navbar({ active, onNavigate }) {
           </a>
         ))}
       </nav>
-
-      <a
-        href="#menu"
-        className="nav-button"
-        onClick={(event) => {
-          event.preventDefault();
-          go("menu");
-        }}
-      >
-        Explore Flavours <span>↗</span>
-      </a>
     </header>
   );
 }

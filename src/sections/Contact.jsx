@@ -1,10 +1,21 @@
-const SOCIALS = [
-  { label: "Instagram", href: "https://instagram.com" },
-  { label: "Pinterest", href: "https://pinterest.com" },
-  { label: "Facebook", href: "https://facebook.com" },
-];
-
 export default function Contact({ onNavigate }) {
+  const handleEnquirySubmit = (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const body = [
+      `Name: ${formData.get("name")}`,
+      `Email: ${formData.get("email")}`,
+      "",
+      formData.get("message"),
+    ].join("\n");
+    const query = new URLSearchParams({
+      subject: "SCOOPY enquiry",
+      body,
+    });
+
+    window.location.href = `mailto:hello@example.com?${query.toString()}`;
+  };
+
   return (
     <section className="contact-section" id="contact">
       <div className="contact-intro">
@@ -17,32 +28,48 @@ export default function Contact({ onNavigate }) {
         <a className="contact-mail" href="mailto:hello@example.com">
           hello@example.com
         </a>
-      </div>
-
-      <div className="contact-panel">
-        <dl>
+        <dl className="contact-details">
+          <div>
+            <dt>Contact</dt>
+            <dd>+00 0000 000 000</dd>
+          </div>
           <div>
             <dt>Address</dt>
             <dd>00 Pinkberry Street, Suite 1, Your City</dd>
           </div>
           <div>
-            <dt>Phone</dt>
-            <dd>+00 0000 000 000</dd>
-          </div>
-          <div>
-            <dt>Opening hours</dt>
+            <dt>Time</dt>
             <dd>Open daily, 11:00 – 23:00</dd>
           </div>
         </dl>
-
-        <div className="social-row">
-          {SOCIALS.map((social) => (
-            <a key={social.label} href={social.href} target="_blank" rel="noreferrer">
-              {social.label}
-            </a>
-          ))}
-        </div>
       </div>
+
+      <form className="contact-form" onSubmit={handleEnquirySubmit}>
+        <span className="eyebrow">ENQUIRIES</span>
+        <h3>Send us a sweet note.</h3>
+        <div className="contact-form__fields">
+          <label>
+            Your name
+            <input autoComplete="name" name="name" required />
+          </label>
+          <label>
+            Email address
+            <input
+              autoComplete="email"
+              name="email"
+              type="email"
+              required
+            />
+          </label>
+          <label>
+            Message
+            <textarea name="message" rows="4" required />
+          </label>
+        </div>
+        <button className="contact-form__submit" type="submit">
+          Send enquiry
+        </button>
+      </form>
 
       <footer className="footer">
         <a
