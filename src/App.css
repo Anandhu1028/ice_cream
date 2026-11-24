@@ -495,7 +495,7 @@
 
 .story-canvas {
   position: absolute;
-  top: var(--nav-h);
+  top: 0;
   left: 0;
   right: 0;
   bottom: 0;
@@ -957,38 +957,54 @@
   }
 
   .story-sticky {
-    display: flex;
-    flex-direction: column;
+    display: block;
   }
 
   .story-canvas {
-    position: relative;
-    top: auto;
-    flex: 0 0 auto;
+    position: absolute;
+    top: 0;
+    bottom: 0;
     width: 100%;
-    height: min(56.25vw, 32vh);
-    aspect-ratio: 16 / 9;
-    margin-top: var(--nav-h);
+    height: 100%;
+    aspect-ratio: auto;
   }
 
   .story-layers {
-    position: relative;
-    top: auto;
-    flex: 1 1 auto;
+    position: absolute;
+    top: var(--nav-h);
+    bottom: 0;
     min-height: 0;
   }
 
   .story-copy {
     overflow: auto;
-    align-items: flex-start;
-    padding: 14px 7% 16px;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 14px 6% 18px;
+  }
+
+  .story-copy .hero-content,
+  .about-sheet,
+  .menu-sheet {
+    width: 100%;
+    max-width: 520px;
+    border: 1px solid rgba(226, 150, 168, 0.22);
+    border-radius: 22px;
+    background: rgba(255, 244, 243, 0.94);
+    box-shadow: 0 12px 32px rgba(84, 44, 55, 0.08);
+  }
+
+  .story-copy .hero-content {
+    padding: 20px;
+  }
+
+  .about-sheet {
+    padding: 20px;
   }
 
   .menu-sheet {
     max-height: none;
-    padding: 0 0 8px;
-    background: transparent;
-    box-shadow: none;
+    padding: 14px 16px 10px;
     backdrop-filter: none;
   }
 

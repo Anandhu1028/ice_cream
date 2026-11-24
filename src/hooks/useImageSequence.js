@@ -153,7 +153,8 @@ function createSequencePlayer() {
     }
 
     const dx = (width - drawWidth) * 0.62;
-    const dy = (height - drawHeight) * 0.5;
+    const verticalAlignment = canvasRatio < 0.75 ? 0.08 : 0.5;
+    const dy = (height - drawHeight) * verticalAlignment;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#f6c3d2";
