@@ -1,0 +1,46 @@
+
+:root {
+  --nav-h: 88px;
+  --font-display: "Baskerville Old Face", "Palatino Linotype", Georgia, serif;
+  --font-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-body);
+  color: #542c37;
+  background: #fff0f2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: auto;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: auto;
+}
+
+body {
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  font: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+::selection {
+  background: #f5a2b6;
+  color: white;
+}
