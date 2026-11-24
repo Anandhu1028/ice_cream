@@ -24,16 +24,11 @@ ScrollTrigger.config({ ignoreMobileResize: true });
 const INTRO_REVEAL_DURATION = 2.05;
 const INTRO_END_TIME = (SEQUENCES[0].duration * 3) / (FRAME_COUNT - 1);
 
-const HERO1_VISIBLE_THROUGH = 45;
-const HERO1_HIDDEN_BY = 60;
-
-const HERO2_APPEAR_START = 75;
-const HERO2_VISIBLE_FROM = 83;
-const HERO2_VISIBLE_THROUGH = 190;
-const HERO2_HIDDEN_BY = 191;
-
-const HERO3_APPEAR_START = 66;
-const HERO3_VISIBLE_FROM = 74;
+const HERO1_VISIBLE_THROUGH = 60;
+const HERO1_HIDDEN_BY = 61;
+const HERO2_VISIBLE_FROM = 100;
+const HERO2_VISIBLE_THROUGH = 168;
+const HERO3_VISIBLE_FROM = 142;
 
 function computeHero1Opacity(frame) {
   if (frame <= HERO1_VISIBLE_THROUGH) return 1;
@@ -42,20 +37,11 @@ function computeHero1Opacity(frame) {
 }
 
 function computeHero2Opacity(frame) {
-  if (frame < HERO2_APPEAR_START || frame >= HERO2_HIDDEN_BY) return 0;
-  if (frame < HERO2_VISIBLE_FROM) {
-    return (frame - (HERO2_APPEAR_START - 1)) / (HERO2_VISIBLE_FROM - (HERO2_APPEAR_START - 1));
-  }
-  if (frame <= HERO2_VISIBLE_THROUGH) return 1;
-  return (HERO2_HIDDEN_BY - frame) / (HERO2_HIDDEN_BY - HERO2_VISIBLE_THROUGH);
+  return frame >= HERO2_VISIBLE_FROM && frame <= HERO2_VISIBLE_THROUGH ? 1 : 0;
 }
 
 function computeHero3Opacity(frame) {
-  if (frame < HERO3_APPEAR_START) return 0;
-  if (frame < HERO3_VISIBLE_FROM) {
-    return (frame - (HERO3_APPEAR_START - 1)) / (HERO3_VISIBLE_FROM - (HERO3_APPEAR_START - 1));
-  }
-  return 1;
+  return frame >= HERO3_VISIBLE_FROM ? 1 : 0;
 }
 
 export default function Story({
@@ -67,6 +53,7 @@ export default function Story({
   const reduced = usePrefersReducedMotion();
   const rootRef = useRef(null);
   const introRef = useRef(null);
+  const introTimelineRef = useRef(null);
   const hero2Ref = useRef(null);
   const hero3Ref = useRef(null);
   const scrollProgressRef = useRef(0);
@@ -94,10 +81,13 @@ export default function Story({
       return undefined;
     }
 
+    if (!ready) return undefined;
+
     introCompleteRef.current = false;
     const introFrame = { time: 0 };
     const timeline = gsap.timeline({
       onComplete: () => {
+        introTimelineRef.current = null;
         const trigger = ScrollTrigger.getById("scoopy-story");
         const origin = trigger?.progress ?? scrollProgressRef.current;
         sequenceOriginRef.current = origin;
@@ -107,6 +97,7 @@ export default function Story({
         onIntroComplete?.();
       },
     });
+    introTimelineRef.current = timeline;
 
     timeline.to(introFrame, {
       time: INTRO_END_TIME,
@@ -116,11 +107,13 @@ export default function Story({
     }, 0);
 
     return () => {
+      introTimelineRef.current = null;
+      timeline.kill();
       introCompleteRef.current = false;
     };
   }, {
     scope: rootRef,
-    dependencies: [reduced, onIntroComplete],
+    dependencies: [reduced, ready, onIntroComplete],
     revertOnUpdate: true,
   });
 
@@ -178,7 +171,15 @@ export default function Story({
       onUpdate: () => {
         const rawProgress = playhead.position;
         scrollProgressRef.current = rawProgress;
-        if (!introCompleteRef.current) return;
+        if (!introCompleteRef.current) {
+          if (rawProgress <= 0) return;
+          introTimelineRef.current?.kill();
+          introTimelineRef.current = null;
+          introCompleteRef.current = true;
+          sequenceOriginRef.current = 0;
+          setStorySequenceOrigin(0);
+          onIntroComplete?.();
+        }
 
         const origin = sequenceOriginRef.current;
         const progress = origin >= 1
@@ -210,7 +211,7 @@ export default function Story({
     };
   }, {
     scope: rootRef,
-    dependencies: [reduced, ready],
+    dependencies: [reduced, ready, onIntroComplete],
     revertOnUpdate: true,
   });
 

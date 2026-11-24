@@ -2,6 +2,7 @@ import { useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import usePrefersReducedMotion from "../hooks/usePrefersReducedMotion";
+import { publicAsset } from "../utils/publicAsset";
 
 gsap.registerPlugin(useGSAP);
 
@@ -89,7 +90,7 @@ export default function LoadingScreen({
         <img
           ref={logoRef}
           className="loader-logo"
-          src="/logo/logo.png"
+          src={publicAsset("logo/logo.png")}
           alt="SCOOPY"
           onLoad={onLogoReady}
           onError={onLogoError}

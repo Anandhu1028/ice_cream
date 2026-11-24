@@ -1,3 +1,5 @@
+import { publicAsset } from "../utils/publicAsset";
+
 export default function Contact({ onNavigate }) {
   const handleEnquirySubmit = (event) => {
     event.preventDefault();
@@ -81,7 +83,7 @@ export default function Contact({ onNavigate }) {
             onNavigate?.("home");
           }}
         >
-          <img src="/logo/logo.png" alt="" />
+          <img src={publicAsset("logo/logo.png")} alt="" />
         </a>
         <p>A little scoop of happiness in every bite.</p>
         <small>© {new Date().getFullYear()} SCOOPY. A sweet preview, not a real shop.</small>

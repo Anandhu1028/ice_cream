@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { publicAsset } from "../utils/publicAsset";
 
 export const FRAME_COUNT = 190;
 
@@ -13,7 +14,7 @@ export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start +
 const MAX_CACHE = 14;
 const MAX_INFLIGHT = 3;
 const PRELOAD_AHEAD = 4;
-const PRELOAD_BEHIND = 1;
+const PRELOAD_BEHIND = 2;
 
 const cache = new Map();
 const failed = new Set();
@@ -21,11 +22,7 @@ const warned = new Set();
 const lru = [];
 
 export function frameSrc(folder, frame) {
-  return `/frames/${folder}/frame_${String(frame).padStart(6, "0")}.png`;
-}
-
-function optimizedFrameSrc(folder, frame) {
-  return `/frames-webp/${folder}/frame_${String(frame).padStart(6, "0")}.webp`;
+  return publicAsset(`frames/${folder}/frame_${String(frame).padStart(6, "0")}.png`);
 }
 
 export const POSTERS = {
@@ -83,6 +80,12 @@ function createSequencePlayer() {
   let raf = 0;
   let pendingTime = null;
   let direction = 1;
+  let requestOrder = 0;
+  let criticalPreloadCount = 0;
+
+  function isCriticalFrame(job) {
+    return criticalPreloadCount > 0 && job.folder === "hero" && job.frame <= 3;
+  }
 
   function touch(key) {
     const index = lru.indexOf(key);
@@ -166,6 +169,24 @@ function createSequencePlayer() {
     if (attached && !raf) raf = requestAnimationFrame(flushSeek);
   }
 
+  function resolveJob(job, value) {
+    if (job.settled) return;
+    job.settled = true;
+    job.resolve(value);
+  }
+
+  function cancelActiveJob(job) {
+    if (job.cancelled) return;
+    job.cancelled = true;
+    if (inflight.get(job.key) === job) inflight.delete(job.key);
+    if (job.img) {
+      job.img.onload = null;
+      job.img.onerror = null;
+      job.img.removeAttribute("src");
+    }
+    resolveJob(job, null);
+  }
+
   function paint() {
     if (!attached || !ctx || !canvas) return;
 
@@ -231,45 +252,45 @@ function createSequencePlayer() {
   }
 
   function pump() {
-    queue.sort((a, b) => a.priority - b.priority);
+    queue.sort((a, b) => a.priority - b.priority || a.order - b.order);
     while (inflight.size < MAX_INFLIGHT && queue.length > 0) {
       const job = queue.shift();
+      if (job.cancelled || job.settled) continue;
       if (cache.has(job.key) || failed.has(job.key)) {
-        job.resolve(cache.get(job.key) || null);
+        resolveJob(job, cache.get(job.key) || null);
         continue;
       }
-      if (inflight.has(job.key)) continue;
+      if (inflight.has(job.key)) {
+        resolveJob(job, null);
+        continue;
+      }
 
-      inflight.set(job.key, job.promise);
+      inflight.set(job.key, job);
       const img = new Image();
+      job.img = img;
       img.decoding = "async";
       if (job.priority <= 2 && "fetchPriority" in img) img.fetchPriority = "high";
 
-      let usingPngFallback = false;
+      const isCurrentJob = () =>
+        !job.cancelled && inflight.get(job.key) === job;
       const fail = () => {
+        if (!isCurrentJob()) return;
         failed.add(job.key);
         inflight.delete(job.key);
         if (!warned.has(job.key)) {
           warned.add(job.key);
           console.warn(
-            `Missing animation frame ${job.folder}/frame_${String(job.frame).padStart(6, "0")}.webp and PNG fallback`
+            `Unable to load animation frame ${job.folder}/frame_${String(job.frame).padStart(6, "0")}.png`
           );
         }
         requestPaint();
-        job.resolve(null);
+        resolveJob(job, null);
         pump();
       };
-      const fallbackToPng = () => {
-        if (usingPngFallback) {
-          fail();
-          return;
-        }
-        usingPngFallback = true;
-        img.src = frameSrc(job.folder, job.frame);
-      };
       const commit = () => {
+        if (!isCurrentJob()) return;
         if (!img.naturalWidth) {
-          fallbackToPng();
+          fail();
           return;
         }
         cache.set(job.key, img);
@@ -277,29 +298,53 @@ function createSequencePlayer() {
         inflight.delete(job.key);
         evict();
         requestPaint();
-        job.resolve(img);
+        resolveJob(job, img);
         pump();
       };
 
       img.onload = () => {
         if (typeof img.decode === "function") {
-          img.decode().then(commit).catch(fallbackToPng);
+          img.decode().then(commit).catch(fail);
         } else commit();
       };
-      img.onerror = fallbackToPng;
-      img.src = optimizedFrameSrc(job.folder, job.frame);
+      img.onerror = fail;
+      img.src = frameSrc(job.folder, job.frame);
     }
+  }
+
+  function prioritizeVisibleFrame(priority) {
+    if (priority !== 0 || inflight.size < MAX_INFLIGHT) return;
+
+    let lowestPriorityJob = null;
+    for (const job of inflight.values()) {
+      if (
+        !isCriticalFrame(job) &&
+        job.priority > priority &&
+        (!lowestPriorityJob || job.priority > lowestPriorityJob.priority)
+      ) {
+        lowestPriorityJob = job;
+      }
+    }
+    if (lowestPriorityJob) cancelActiveJob(lowestPriorityJob);
   }
 
   function requestFrame(folder, frame, priority = 10) {
     const key = `${folder}:${frame}`;
     if (cache.has(key)) return Promise.resolve(cache.get(key));
     if (failed.has(key)) return Promise.resolve(null);
-    if (inflight.has(key)) return inflight.get(key);
+    const active = inflight.get(key);
+    if (active) {
+      active.priority = Math.min(active.priority, priority);
+      if (active.priority <= 2 && active.img && "fetchPriority" in active.img) {
+        active.img.fetchPriority = "high";
+      }
+      return active.promise;
+    }
 
     const queued = queue.find((item) => item.key === key);
     if (queued) {
       queued.priority = Math.min(queued.priority, priority);
+      prioritizeVisibleFrame(queued.priority);
       pump();
       return queued.promise;
     }
@@ -308,10 +353,26 @@ function createSequencePlayer() {
     const promise = new Promise((res) => {
       resolve = res;
     });
-    queue.push({ folder, frame, key, priority, promise, resolve });
+    queue.push({
+      folder,
+      frame,
+      key,
+      priority,
+      order: requestOrder,
+      promise,
+      resolve,
+      settled: false,
+      cancelled: false,
+      img: null,
+    });
+    requestOrder += 1;
+    prioritizeVisibleFrame(priority);
     if (queue.length > 40) {
-      queue.sort((a, b) => a.priority - b.priority);
-      queue.splice(24).forEach((job) => job.resolve(null));
+      queue.sort((a, b) => a.priority - b.priority || a.order - b.order);
+      queue.splice(24).forEach((job) => {
+        job.cancelled = true;
+        resolveJob(job, null);
+      });
     }
     pump();
     return promise;
@@ -354,11 +415,25 @@ function createSequencePlayer() {
 
     for (let index = queue.length - 1; index >= 0; index -= 1) {
       const job = queue[index];
-      if (!targets.has(job.key)) {
+      const priority = targets.get(job.key);
+      if (priority == null && !isCriticalFrame(job)) {
         queue.splice(index, 1);
-        job.resolve(null);
+        job.cancelled = true;
+        resolveJob(job, null);
       } else {
-        job.priority = targets.get(job.key);
+        job.priority = priority == null ? Math.min(job.priority, 2) : priority;
+      }
+    }
+
+    for (const job of inflight.values()) {
+      const priority = targets.get(job.key);
+      if (priority == null && !isCriticalFrame(job)) {
+        cancelActiveJob(job);
+      } else {
+        job.priority = priority == null ? Math.min(job.priority, 2) : priority;
+        if (job.priority <= 2 && job.img && "fetchPriority" in job.img) {
+          job.img.fetchPriority = "high";
+        }
       }
     }
 
@@ -400,11 +475,11 @@ function createSequencePlayer() {
     const rect = canvas.parentElement.getBoundingClientRect();
     const cssWidth = Math.max(1, rect.width);
     const cssHeight = Math.max(1, rect.height);
-    const pixelRatioCap = window.innerWidth <= 760 ? 1.35 : 1.75;
+    const pixelRatioCap = 1.35;
     const ratio = Math.min(window.devicePixelRatio || 1, pixelRatioCap);
     let width = Math.round(cssWidth * ratio);
     let height = Math.round(cssHeight * ratio);
-    const cap = 1440;
+    const cap = window.innerWidth <= 760 ? 1440 : 2048;
     const edge = Math.max(width, height);
     if (edge > cap) {
       const scale = cap / edge;
@@ -441,6 +516,7 @@ function createSequencePlayer() {
 
   function preloadCritical(onProgress = () => {}) {
     const targets = [1, 2, 3].map((frame) => ({ folder: "hero", frame }));
+    criticalPreloadCount += 1;
     let settled = 0;
     let loaded = 0;
     let timedOut = false;
@@ -477,7 +553,11 @@ function createSequencePlayer() {
         seek(currentTime);
         return { loaded, total: targets.length, timedOut };
       })
-      .finally(() => window.clearTimeout(timeoutId));
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        criticalPreloadCount = Math.max(0, criticalPreloadCount - 1);
+        preloadAround(currentTime, current);
+      });
   }
 
   return { attach, detach, resize, seek, preloadCritical };

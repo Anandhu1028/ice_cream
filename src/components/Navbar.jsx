@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { publicAsset } from "../utils/publicAsset";
 
 const LINKS = [
   { id: "home", label: "Home" },
@@ -41,7 +42,7 @@ export default function Navbar({ active, theme, background, onNavigate }) {
           go("home");
         }}
       >
-        <img src="/logo/logo.png" alt="" />
+        <img src={publicAsset("logo/logo.png")} alt="" />
       </a>
 
       <button
