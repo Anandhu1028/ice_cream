@@ -1152,14 +1152,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin-top: 72px;
-  padding: 28px 0 32px;
-  border-top: 1px solid rgba(84, 44, 55, 0.08);
+  margin: 72px -9.524% 0;
+  padding: 32px 9.524% 36px;
+  border-top: 1px solid rgba(255, 224, 232, 0.14);
+  background: linear-gradient(135deg, #2d1019 0%, #441827 100%);
+  color: #fff2f5;
 }
 
 .footer p,
 .footer small {
-  color: #906b72;
+  color: rgba(255, 235, 240, 0.82);
   font-size: 13px;
 }
 

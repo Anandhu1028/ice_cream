@@ -86,7 +86,7 @@ export default function Contact({ onNavigate }) {
           <img src={publicAsset("logo/logo.png")} alt="" />
         </a>
         <p>A little scoop of happiness in every bite.</p>
-        <small>© {new Date().getFullYear()} A sweet preview, not a real shop.</small>
+        <small>© {new Date().getFullYear()} Arya Falooda. A sweet preview, not a real shop.</small>
       </footer>
     </section>
   );
