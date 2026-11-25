@@ -25,7 +25,7 @@ export default function Contact({ onNavigate }) {
         <h2>LET&apos;S MAKE LIFE SWEETER.</h2>
         <p>
           We would love to hear from you. The details on this page
-          are sample placeholders for the SCOOPY preview.
+          are sample placeholders for this preview.
         </p>
         <a className="contact-mail" href="mailto:hello@example.com">
           hello@example.com
@@ -86,7 +86,7 @@ export default function Contact({ onNavigate }) {
           <img src={publicAsset("logo/logo.png")} alt="" />
         </a>
         <p>A little scoop of happiness in every bite.</p>
-        <small>© {new Date().getFullYear()} SCOOPY. A sweet preview, not a real shop.</small>
+        <small>© {new Date().getFullYear()} A sweet preview, not a real shop.</small>
       </footer>
     </section>
   );
