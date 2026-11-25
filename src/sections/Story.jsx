@@ -129,6 +129,10 @@ export default function Story({
     gsap.set([hero2Ref.current, hero3Ref.current], { opacity: 0, visibility: "hidden" });
     gsap.set(introRef.current, { opacity: 1, visibility: "visible" });
 
+    let lastHero1Vis = "visible";
+    let lastHero2Vis = "hidden";
+    let lastHero3Vis = "hidden";
+
     const syncTextOverlays = (time) => {
       const hero1Frame = frameAtTime(SEQUENCES[0], time);
       const hero2Frame = frameAtTime(SEQUENCES[1], time);
@@ -136,19 +140,32 @@ export default function Story({
 
       const hero1Opacity = computeHero1Opacity(hero1Frame);
       setIntroOpacity(hero1Opacity);
-      introRef.current.style.visibility = hero1Opacity === 0 ? "hidden" : "visible";
+      const h1Vis = hero1Opacity === 0 ? "hidden" : "visible";
+      if (h1Vis !== lastHero1Vis) {
+        lastHero1Vis = h1Vis;
+        introRef.current.style.visibility = h1Vis;
+      }
+
       const hero2Opacity =
         time >= SEQUENCES[1].start && time <= SEQUENCES[1].start + SEQUENCES[1].duration
           ? computeHero2Opacity(hero2Frame)
           : 0;
       setHero2Opacity(hero2Opacity);
-      hero2Ref.current.style.visibility = hero2Opacity === 0 ? "hidden" : "visible";
+      const h2Vis = hero2Opacity === 0 ? "hidden" : "visible";
+      if (h2Vis !== lastHero2Vis) {
+        lastHero2Vis = h2Vis;
+        hero2Ref.current.style.visibility = h2Vis;
+      }
 
       const hero3Opacity = time >= SEQUENCES[2].start
         ? computeHero3Opacity(hero3Frame)
         : 0;
       setHero3Opacity(hero3Opacity);
-      hero3Ref.current.style.visibility = hero3Opacity === 0 ? "hidden" : "visible";
+      const h3Vis = hero3Opacity === 0 ? "hidden" : "visible";
+      if (h3Vis !== lastHero3Vis) {
+        lastHero3Vis = h3Vis;
+        hero3Ref.current.style.visibility = h3Vis;
+      }
     };
 
     const timeline = gsap.timeline({

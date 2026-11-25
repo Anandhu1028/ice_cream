@@ -11,18 +11,33 @@ export const SEQUENCES = [
 
 export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start + scene.duration));
 
-const MAX_CACHE = 14;
-const MAX_INFLIGHT = 3;
-const PRELOAD_AHEAD = 4;
-const PRELOAD_BEHIND = 2;
+const IS_MOBILE = typeof window !== "undefined" && window.innerWidth <= 760;
+const MAX_CACHE = IS_MOBILE ? 75 : 180;
+const MAX_INFLIGHT = IS_MOBILE ? 6 : 10;
+const PRELOAD_AHEAD = IS_MOBILE ? 16 : 26;
+const PRELOAD_BEHIND = IS_MOBILE ? 8 : 14;
+
+const CAN_USE_WEBP = (() => {
+  if (typeof document === "undefined") return true;
+  try {
+    const canvas = document.createElement("canvas");
+    return canvas.toDataURL("image/webp").indexOf("data:image/webp") === 0;
+  } catch {
+    return true;
+  }
+})();
 
 const cache = new Map();
 const failed = new Set();
 const warned = new Set();
 const lru = [];
 
-export function frameSrc(folder, frame) {
-  return publicAsset(`frames/${folder}/frame_${String(frame).padStart(6, "0")}.png`);
+export function frameSrc(folder, frame, usePng = false) {
+  const pad = String(frame).padStart(6, "0");
+  if (!usePng && CAN_USE_WEBP) {
+    return publicAsset(`frames-webp/${folder}/frame_${pad}.webp`);
+  }
+  return publicAsset(`frames/${folder}/frame_${pad}.png`);
 }
 
 export const POSTERS = {
@@ -83,8 +98,18 @@ function createSequencePlayer() {
   let requestOrder = 0;
   let criticalPreloadCount = 0;
 
+  // Progressive preloader state
+  let progressiveIndex = 0;
+  let progressiveTimer = 0;
+  const allFrameTargets = [];
+  for (const seq of SEQUENCES) {
+    for (let f = 1; f <= FRAME_COUNT; f += 1) {
+      allFrameTargets.push({ folder: seq.folder, frame: f });
+    }
+  }
+
   function isCriticalFrame(job) {
-    return criticalPreloadCount > 0 && job.folder === "hero" && job.frame <= 3;
+    return criticalPreloadCount > 0 && job.folder === "hero" && job.frame <= 8;
   }
 
   function touch(key) {
@@ -131,17 +156,25 @@ function createSequencePlayer() {
     const exact = readCached(sample.scene.folder, sample.frame);
     if (exact) return exact;
 
-    for (let distance = 1; distance <= MAX_CACHE; distance += 1) {
-      const before = sample.frame - distance;
-      const after = sample.frame + distance;
-      if (before >= 1) {
-        const img = readCached(sample.scene.folder, before);
-        if (img) return img;
+    // Search closest decoded frame in cache
+    let closest = null;
+    let minDistance = Infinity;
+
+    for (const [key, img] of cache.entries()) {
+      if (!key.startsWith(sample.scene.folder + ":")) continue;
+      const separator = key.lastIndexOf(":");
+      const frameNum = Number(key.slice(separator + 1));
+      const dist = Math.abs(frameNum - sample.frame);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closest = { img, key };
+        if (dist === 1) break;
       }
-      if (after <= FRAME_COUNT) {
-        const img = readCached(sample.scene.folder, after);
-        if (img) return img;
-      }
+    }
+
+    if (closest) return closest;
+    if (lastGood && lastGood.sample?.scene?.folder === sample.scene.folder) {
+      return { img: lastGood.img, key: lastGood.key };
     }
     return null;
   }
@@ -152,7 +185,8 @@ function createSequencePlayer() {
     const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight);
     const drawWidth = img.naturalWidth * scale;
     const drawHeight = img.naturalHeight * scale;
-    const dx = (width - drawWidth) * scene.focalX;
+    const focalX = scene?.focalX ?? 0.5;
+    const dx = (width - drawWidth) * focalX;
     const dy = (height - drawHeight) * 0.5;
 
     ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
@@ -271,22 +305,20 @@ function createSequencePlayer() {
       img.decoding = "async";
       if (job.priority <= 2 && "fetchPriority" in img) img.fetchPriority = "high";
 
-      const isCurrentJob = () =>
-        !job.cancelled && inflight.get(job.key) === job;
+      const isCurrentJob = () => !job.cancelled && inflight.get(job.key) === job;
       const fail = () => {
         if (!isCurrentJob()) return;
         failed.add(job.key);
         inflight.delete(job.key);
         if (!warned.has(job.key)) {
           warned.add(job.key);
-          console.warn(
-            `Unable to load animation frame ${job.folder}/frame_${String(job.frame).padStart(6, "0")}.png`
-          );
+          console.warn(`Unable to load animation frame ${job.key}`);
         }
         requestPaint();
         resolveJob(job, null);
         pump();
       };
+
       const commit = () => {
         if (!isCurrentJob()) return;
         if (!img.naturalWidth) {
@@ -304,28 +336,29 @@ function createSequencePlayer() {
 
       img.onload = () => {
         if (typeof img.decode === "function") {
-          img.decode().then(commit).catch(fail);
-        } else commit();
+          img.decode().then(commit).catch(() => {
+            if (img.naturalWidth > 0) {
+              commit();
+            } else {
+              fail();
+            }
+          });
+        } else {
+          commit();
+        }
       };
-      img.onerror = fail;
+
+      img.onerror = () => {
+        if (!job.usedFallback) {
+          job.usedFallback = true;
+          img.src = frameSrc(job.folder, job.frame, true);
+          return;
+        }
+        fail();
+      };
+
       img.src = frameSrc(job.folder, job.frame);
     }
-  }
-
-  function prioritizeVisibleFrame(priority) {
-    if (priority !== 0 || inflight.size < MAX_INFLIGHT) return;
-
-    let lowestPriorityJob = null;
-    for (const job of inflight.values()) {
-      if (
-        !isCriticalFrame(job) &&
-        job.priority > priority &&
-        (!lowestPriorityJob || job.priority > lowestPriorityJob.priority)
-      ) {
-        lowestPriorityJob = job;
-      }
-    }
-    if (lowestPriorityJob) cancelActiveJob(lowestPriorityJob);
   }
 
   function requestFrame(folder, frame, priority = 10) {
@@ -344,7 +377,6 @@ function createSequencePlayer() {
     const queued = queue.find((item) => item.key === key);
     if (queued) {
       queued.priority = Math.min(queued.priority, priority);
-      prioritizeVisibleFrame(queued.priority);
       pump();
       return queued.promise;
     }
@@ -364,18 +396,59 @@ function createSequencePlayer() {
       settled: false,
       cancelled: false,
       img: null,
+      usedFallback: false,
     });
     requestOrder += 1;
-    prioritizeVisibleFrame(priority);
-    if (queue.length > 40) {
+
+    // Prune stale queue entries only if queue is excessively large
+    if (queue.length > 60) {
       queue.sort((a, b) => a.priority - b.priority || a.order - b.order);
-      queue.splice(24).forEach((job) => {
-        job.cancelled = true;
-        resolveJob(job, null);
+      queue.splice(40).forEach((job) => {
+        if (job.priority > 20) {
+          job.cancelled = true;
+          resolveJob(job, null);
+        }
       });
     }
     pump();
     return promise;
+  }
+
+  function scheduleProgressivePreload() {
+    if (progressiveTimer) return;
+    const run = () => {
+      progressiveTimer = 0;
+      // Do not saturate network if active user scrubbing is underway
+      if (inflight.size >= 4 || queue.length >= 8) {
+        progressiveTimer = window.setTimeout(scheduleProgressivePreload, 150);
+        return;
+      }
+
+      let enqueued = 0;
+      while (progressiveIndex < allFrameTargets.length && enqueued < 4) {
+        const target = allFrameTargets[progressiveIndex];
+        progressiveIndex += 1;
+        const key = `${target.folder}:${target.frame}`;
+        if (!cache.has(key) && !inflight.has(key) && !queue.some((j) => j.key === key)) {
+          requestFrame(target.folder, target.frame, 85);
+          enqueued += 1;
+        }
+      }
+
+      if (progressiveIndex < allFrameTargets.length) {
+        if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+          progressiveTimer = window.requestIdleCallback(scheduleProgressivePreload, { timeout: 200 });
+        } else {
+          progressiveTimer = window.setTimeout(scheduleProgressivePreload, 35);
+        }
+      }
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      progressiveTimer = window.requestIdleCallback(run, { timeout: 200 });
+    } else {
+      progressiveTimer = window.setTimeout(run, 50);
+    }
   }
 
   function preloadAround(time, state) {
@@ -404,33 +477,28 @@ function createSequencePlayer() {
       }
     }
 
+    // Near scene transitions, preload initial frames of adjacent scene
     for (let index = 0; index < SEQUENCES.length - 1; index += 1) {
       const scene = SEQUENCES[index];
-      if (time >= scene.start + scene.duration * 0.72 && time < SEQUENCES[index + 1].start) {
-        for (let frame = 1; frame <= 6; frame += 1) {
+      if (time >= scene.start + scene.duration * 0.7 && time < SEQUENCES[index + 1].start) {
+        for (let frame = 1; frame <= 10; frame += 1) {
           addTarget(SEQUENCES[index + 1].folder, frame, PRELOAD_AHEAD + PRELOAD_BEHIND + frame);
         }
       }
     }
 
-    for (let index = queue.length - 1; index >= 0; index -= 1) {
-      const job = queue[index];
+    // Boost priority of queued and in-flight targets matching the playhead
+    for (const job of queue) {
       const priority = targets.get(job.key);
-      if (priority == null && !isCriticalFrame(job)) {
-        queue.splice(index, 1);
-        job.cancelled = true;
-        resolveJob(job, null);
-      } else {
-        job.priority = priority == null ? Math.min(job.priority, 2) : priority;
+      if (priority != null) {
+        job.priority = priority;
       }
     }
 
     for (const job of inflight.values()) {
       const priority = targets.get(job.key);
-      if (priority == null && !isCriticalFrame(job)) {
-        cancelActiveJob(job);
-      } else {
-        job.priority = priority == null ? Math.min(job.priority, 2) : priority;
+      if (priority != null) {
+        job.priority = priority;
         if (job.priority <= 2 && job.img && "fetchPriority" in job.img) {
           job.img.fetchPriority = "high";
         }
@@ -475,7 +543,7 @@ function createSequencePlayer() {
     const rect = canvas.parentElement.getBoundingClientRect();
     const cssWidth = Math.max(1, rect.width);
     const cssHeight = Math.max(1, rect.height);
-    const pixelRatioCap = 1.35;
+    const pixelRatioCap = IS_MOBILE ? 1.35 : 1.5;
     const ratio = Math.min(window.devicePixelRatio || 1, pixelRatioCap);
     let width = Math.round(cssWidth * ratio);
     let height = Math.round(cssHeight * ratio);
@@ -515,7 +583,7 @@ function createSequencePlayer() {
   }
 
   function preloadCritical(onProgress = () => {}) {
-    const targets = [1, 2, 3].map((frame) => ({ folder: "hero", frame }));
+    const targets = [1, 2, 3, 4, 5, 6, 7, 8].map((frame) => ({ folder: "hero", frame }));
     criticalPreloadCount += 1;
     let settled = 0;
     let loaded = 0;
@@ -537,7 +605,7 @@ function createSequencePlayer() {
         timedOut = true;
         reportProgress();
         resolve("timeout");
-      }, 12000);
+      }, 8000);
     });
 
     return Promise.race([Promise.all(tasks), timeout])
@@ -547,8 +615,8 @@ function createSequencePlayer() {
         } else {
           reportProgress();
         }
-        for (let frame = 4; frame <= 8; frame += 1) {
-          requestFrame("hero", frame, 14);
+        for (let frame = 9; frame <= 18; frame += 1) {
+          requestFrame("hero", frame, 12);
         }
         seek(currentTime);
         return { loaded, total: targets.length, timedOut };
@@ -557,6 +625,7 @@ function createSequencePlayer() {
         window.clearTimeout(timeoutId);
         criticalPreloadCount = Math.max(0, criticalPreloadCount - 1);
         preloadAround(currentTime, current);
+        scheduleProgressivePreload();
       });
   }
 
