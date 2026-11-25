@@ -33,15 +33,15 @@ function computeHero1State(frame) {
 }
 
 function computeHero2State(frame) {
-  if (frame < 18) return { opacity: 0, y: 28 };
-  if (frame < 52) {
-    const progress = (frame - 18) / (52 - 18);
+  if (frame < 100) return { opacity: 0, y: 28 };
+  if (frame < 118) {
+    const progress = (frame - 100) / (118 - 100);
     const ease = progress * progress * (3 - 2 * progress);
     return { opacity: ease, y: 28 * (1 - ease) };
   }
-  if (frame <= 135) return { opacity: 1, y: 0 };
-  if (frame < 172) {
-    const progress = (frame - 135) / (172 - 135);
+  if (frame <= 172) return { opacity: 1, y: 0 };
+  if (frame < 190) {
+    const progress = (frame - 172) / (190 - 172);
     const ease = progress * progress * (3 - 2 * progress);
     return { opacity: 1 - ease, y: -28 * ease };
   }
@@ -49,15 +49,15 @@ function computeHero2State(frame) {
 }
 
 function computeHero3State(frame) {
-  if (frame < 18) return { opacity: 0, y: 28 };
-  if (frame < 52) {
-    const progress = (frame - 18) / (52 - 18);
+  if (frame < 110) return { opacity: 0, y: 28 };
+  if (frame < 126) {
+    const progress = (frame - 110) / (126 - 110);
     const ease = progress * progress * (3 - 2 * progress);
     return { opacity: ease, y: 28 * (1 - ease) };
   }
-  if (frame <= 145) return { opacity: 1, y: 0 };
-  if (frame < 182) {
-    const progress = (frame - 145) / (182 - 145);
+  if (frame <= 172) return { opacity: 1, y: 0 };
+  if (frame < 190) {
+    const progress = (frame - 172) / (190 - 172);
     const ease = progress * progress * (3 - 2 * progress);
     return { opacity: 1 - ease, y: -28 * ease };
   }
