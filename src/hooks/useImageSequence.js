@@ -4,9 +4,9 @@ import { publicAsset } from "../utils/publicAsset";
 export const FRAME_COUNT = 190;
 
 export const SEQUENCES = [
-  { id: "hero", folder: "hero", start: 0, duration: 1.08, background: "#d8a2ac", rgb: [216, 162, 172], focalX: 0.62 },
-  { id: "hero2", folder: "hero2", start: 0.96, duration: 1.1, background: "#4b281e", rgb: [75, 40, 30], focalX: 0.26 },
-  { id: "hero3", folder: "hero3", start: 1.94, duration: 1.06, background: "#efe2c7", rgb: [239, 226, 199], focalX: 0.77 },
+  { id: "hero", folder: "hero", start: 0, duration: 1.08, background: "#d8a2ac", rgb: [216, 162, 172], focalX: 0.72 },
+  { id: "hero2", folder: "hero2", start: 0.96, duration: 1.1, background: "#4b281e", rgb: [75, 40, 30], focalX: 0.75 },
+  { id: "hero3", folder: "hero3", start: 1.94, duration: 1.06, background: "#efe2c7", rgb: [239, 226, 199], focalX: 0.75 },
 ];
 
 export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start + scene.duration));
