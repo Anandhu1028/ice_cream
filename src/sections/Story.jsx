@@ -22,7 +22,9 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 ScrollTrigger.config({ ignoreMobileResize: true });
 
 const INTRO_REVEAL_DURATION = 2.05;
-const INTRO_END_TIME = (SEQUENCES[0].duration * 3) / (FRAME_COUNT - 1);
+const INTRO_END_TIME =
+  (SEQUENCES[0].duration * 3) /
+  ((SEQUENCES[0].endFrame ?? FRAME_COUNT) - (SEQUENCES[0].startFrame ?? 1));
 
 function computeHero1State(frame) {
   if (frame <= 170) return { opacity: 1, y: 0 };
@@ -260,7 +262,7 @@ export default function Story({
       <section className={`story-sticky${reduced ? " is-reduced" : ""}`} ref={rootRef}>
         <div className="story-canvas" aria-hidden="true">
           {reduced && (
-            <img className="hero-intro__poster" src={frameSrc("hero", 1)} alt="" />
+            <img className="hero-intro__poster" src={frameSrc("hero", SEQUENCES[0].startFrame ?? 42)} alt="" />
           )}
           <IceCreamCanvas />
         </div>

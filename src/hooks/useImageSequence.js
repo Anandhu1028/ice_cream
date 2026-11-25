@@ -4,9 +4,9 @@ import { publicAsset } from "../utils/publicAsset";
 export const FRAME_COUNT = 190;
 
 export const SEQUENCES = [
-  { id: "hero", folder: "hero", start: 0, duration: 1.08, background: "#d8a2ac", rgb: [216, 162, 172], focalX: 0.72 },
-  { id: "hero2", folder: "hero2", start: 0.96, duration: 1.1, background: "#4b281e", rgb: [75, 40, 30], focalX: 0.75 },
-  { id: "hero3", folder: "hero3", start: 1.94, duration: 1.06, background: "#efe2c7", rgb: [239, 226, 199], focalX: 0.75 },
+  { id: "hero", folder: "hero", start: 0, duration: 1.08, startFrame: 42, endFrame: 190, background: "#d8a2ac", rgb: [216, 162, 172], focalX: 0.72 },
+  { id: "hero2", folder: "hero2", start: 0.96, duration: 1.1, startFrame: 1, endFrame: 190, background: "#4b281e", rgb: [75, 40, 30], focalX: 0.75 },
+  { id: "hero3", folder: "hero3", start: 1.94, duration: 1.06, startFrame: 1, endFrame: 190, background: "#efe2c7", rgb: [239, 226, 199], focalX: 0.75 },
 ];
 
 export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start + scene.duration));
@@ -47,8 +47,10 @@ export const POSTERS = {
 };
 
 export function frameAtTime(scene, time) {
+  const startFrame = scene.startFrame ?? 1;
+  const endFrame = scene.endFrame ?? FRAME_COUNT;
   const progress = Math.max(0, Math.min(1, (time - scene.start) / scene.duration));
-  return Math.round(progress * (FRAME_COUNT - 1)) + 1;
+  return Math.round(progress * (endFrame - startFrame)) + startFrame;
 }
 
 function samplesAtTime(time) {
@@ -103,13 +105,16 @@ function createSequencePlayer() {
   let progressiveTimer = 0;
   const allFrameTargets = [];
   for (const seq of SEQUENCES) {
-    for (let f = 1; f <= FRAME_COUNT; f += 1) {
+    const startFrame = seq.startFrame ?? 1;
+    const endFrame = seq.endFrame ?? FRAME_COUNT;
+    for (let f = startFrame; f <= endFrame; f += 1) {
       allFrameTargets.push({ folder: seq.folder, frame: f });
     }
   }
 
   function isCriticalFrame(job) {
-    return criticalPreloadCount > 0 && job.folder === "hero" && job.frame <= 8;
+    const heroStart = SEQUENCES[0].startFrame ?? 1;
+    return criticalPreloadCount > 0 && job.folder === "hero" && job.frame >= heroStart && job.frame < heroStart + 8;
   }
 
   function touch(key) {
@@ -121,8 +126,10 @@ function createSequencePlayer() {
   function protectedKeys() {
     const keys = new Set();
     for (const sample of current.samples) {
+      const startFrame = sample.scene.startFrame ?? 1;
+      const endFrame = sample.scene.endFrame ?? FRAME_COUNT;
       for (let delta = -PRELOAD_BEHIND; delta <= PRELOAD_AHEAD; delta += 1) {
-        const frame = Math.max(1, Math.min(FRAME_COUNT, sample.frame + direction * delta));
+        const frame = Math.max(startFrame, Math.min(endFrame, sample.frame + direction * delta));
         keys.add(`${sample.scene.folder}:${frame}`);
       }
     }
@@ -462,16 +469,18 @@ function createSequencePlayer() {
     };
 
     for (const sample of state.samples) {
+      const startFrame = sample.scene.startFrame ?? 1;
+      const endFrame = sample.scene.endFrame ?? FRAME_COUNT;
       addTarget(sample.scene.folder, sample.frame, 0);
       for (let step = 1; step <= PRELOAD_AHEAD; step += 1) {
         const frame = sample.frame + direction * step;
-        if (frame >= 1 && frame <= FRAME_COUNT) {
+        if (frame >= startFrame && frame <= endFrame) {
           addTarget(sample.scene.folder, frame, step);
         }
       }
       for (let step = 1; step <= PRELOAD_BEHIND; step += 1) {
         const frame = sample.frame - direction * step;
-        if (frame >= 1 && frame <= FRAME_COUNT) {
+        if (frame >= startFrame && frame <= endFrame) {
           addTarget(sample.scene.folder, frame, PRELOAD_AHEAD + step);
         }
       }
@@ -480,9 +489,11 @@ function createSequencePlayer() {
     // Near scene transitions, preload initial frames of adjacent scene
     for (let index = 0; index < SEQUENCES.length - 1; index += 1) {
       const scene = SEQUENCES[index];
-      if (time >= scene.start + scene.duration * 0.7 && time < SEQUENCES[index + 1].start) {
-        for (let frame = 1; frame <= 10; frame += 1) {
-          addTarget(SEQUENCES[index + 1].folder, frame, PRELOAD_AHEAD + PRELOAD_BEHIND + frame);
+      const nextScene = SEQUENCES[index + 1];
+      const nextStart = nextScene.startFrame ?? 1;
+      if (time >= scene.start + scene.duration * 0.7 && time < nextScene.start) {
+        for (let offset = 0; offset < 10; offset += 1) {
+          addTarget(nextScene.folder, nextStart + offset, PRELOAD_AHEAD + PRELOAD_BEHIND + offset + 1);
         }
       }
     }
@@ -583,7 +594,11 @@ function createSequencePlayer() {
   }
 
   function preloadCritical(onProgress = () => {}) {
-    const targets = [1, 2, 3, 4, 5, 6, 7, 8].map((frame) => ({ folder: "hero", frame }));
+    const heroStart = SEQUENCES[0].startFrame ?? 1;
+    const targets = Array.from({ length: 8 }, (_, index) => ({
+      folder: "hero",
+      frame: heroStart + index,
+    }));
     criticalPreloadCount += 1;
     let settled = 0;
     let loaded = 0;
@@ -615,7 +630,7 @@ function createSequencePlayer() {
         } else {
           reportProgress();
         }
-        for (let frame = 9; frame <= 18; frame += 1) {
+        for (let frame = heroStart + 8; frame <= heroStart + 17; frame += 1) {
           requestFrame("hero", frame, 12);
         }
         seek(currentTime);
