@@ -278,49 +278,6 @@ export default function Story({
             <p className="hero-intro__support">
               Indulge in the luscious richness of our handcrafted strawberry falooda — made with premium creamy milk, fresh strawberries, sweet basil seeds, and velvety ice cream.
             </p>
-            <div className="hero-intro__features">
-              <span className="hero-intro__feature">
-                <svg className="hero-intro__check" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5"/></svg>
-                100% Fresh Ingredients
-              </span>
-              <span className="hero-intro__feature">
-                <svg className="hero-intro__check" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5"/></svg>
-                Handcrafted Daily
-              </span>
-              <span className="hero-intro__feature">
-                <svg className="hero-intro__check" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5"/></svg>
-                Signature Recipes
-              </span>
-            </div>
-            <div className="hero-intro__actions">
-              <a
-                className="hero-intro__cta"
-                href="#menu"
-                onClick={(event) => {
-                  event.preventDefault();
-                  navigateToStorySection("menu");
-                }}
-              >
-                Explore Our Flavours
-              </a>
-            </div>
-            <div className="hero-intro__rating">
-              <div className="hero-intro__avatars" aria-hidden="true">
-                <span className="hero-intro__avatar">
-                  <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#f7d6cb"/><circle cx="16" cy="12" r="5.5" fill="#8d4b38"/><path d="M6 28c0-5 4.5-8.5 10-8.5s10 3.5 10 8.5" fill="#8d4b38"/></svg>
-                </span>
-                <span className="hero-intro__avatar">
-                  <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#eed5be"/><circle cx="16" cy="12" r="5.5" fill="#5c3826"/><path d="M6 28c0-5 4.5-8.5 10-8.5s10 3.5 10 8.5" fill="#5c3826"/></svg>
-                </span>
-                <span className="hero-intro__avatar">
-                  <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="#e9c8bc"/><circle cx="16" cy="12" r="5.5" fill="#753f32"/><path d="M6 28c0-5 4.5-8.5 10-8.5s10 3.5 10 8.5" fill="#753f32"/></svg>
-                </span>
-              </div>
-              <div className="hero-intro__stars" aria-hidden="true">★★★★★</div>
-              <span className="hero-intro__rating-text">
-                Rated <strong>4.9/5</strong> by 10,000+ Sweet Lovers
-              </span>
-            </div>
           </div>
         </div>
         <div
@@ -334,41 +291,9 @@ export default function Story({
               Born From Passion, Crafted With Love.
             </h2>
             <p className="scene-overlay__support">
-              We unite time-honoured confectionary traditions with modern dessert artistry.
-              Every creation begins with pure farm-fresh dairy, slow-churned in micro-batches and
-              infused with peak-season ingredients to deliver an extraordinary sensory experience.
+              Crafted in small batches with farm-fresh dairy and real, seasonal ingredients for
+              pure indulgence in every scoop.
             </p>
-            <div className="scene-overlay__metrics">
-              <div className="scene-overlay__metric">
-                <span className="scene-overlay__metric-num">100%</span>
-                <strong className="scene-overlay__metric-label">Fresh Dairy</strong>
-                <span className="scene-overlay__metric-sub">Pure farm sourcing</span>
-              </div>
-              <div className="scene-overlay__metric">
-                <span className="scene-overlay__metric-num">Slow</span>
-                <strong className="scene-overlay__metric-label">Churned Craft</strong>
-                <span className="scene-overlay__metric-sub">Micro-batch texture</span>
-              </div>
-              <div className="scene-overlay__metric">
-                <span className="scene-overlay__metric-num">Zero</span>
-                <strong className="scene-overlay__metric-label">Additives</strong>
-                <span className="scene-overlay__metric-sub">Real fruit & cocoa</span>
-              </div>
-            </div>
-            <div className="scene-overlay__trust-row">
-              <span className="scene-overlay__trust-item">
-                <svg className="scene-overlay__trust-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M5 8.5L7 10.5L11 6"/></svg>
-                Artisanal Integrity
-              </span>
-              <span className="scene-overlay__trust-item">
-                <svg className="scene-overlay__trust-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M5 8.5L7 10.5L11 6"/></svg>
-                Small-Batch Precision
-              </span>
-              <span className="scene-overlay__trust-item">
-                <svg className="scene-overlay__trust-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M5 8.5L7 10.5L11 6"/></svg>
-                Original Recipes
-              </span>
-            </div>
           </div>
         </div>
         <div
