@@ -68,14 +68,15 @@ function createSequencePlayer() {
   let requestOrder = 0;
   let criticalPreloadCount = 0;
 
-  // Progressive preloader state
+  // Progressive preloader state: warm key scene anchor frames without thrashing LRU cache
   let progressiveIndex = 0;
   let progressiveTimer = 0;
   const allFrameTargets = [];
   for (const seq of SEQUENCES) {
     const startFrame = seq.startFrame ?? 1;
     const endFrame = seq.endFrame ?? FRAME_COUNT;
-    for (let f = startFrame; f <= endFrame; f += 1) {
+    const anchorEnd = Math.min(endFrame, startFrame + 24);
+    for (let f = startFrame; f <= anchorEnd; f += 1) {
       allFrameTargets.push({ folder: seq.folder, frame: f });
     }
   }
@@ -324,9 +325,9 @@ function createSequencePlayer() {
     if (progressiveTimer) return;
     const run = () => {
       progressiveTimer = 0;
-      // Do not saturate network if active user scrubbing is underway
-      if (inflight.size >= 4 || queue.length >= 8) {
-        progressiveTimer = window.setTimeout(scheduleProgressivePreload, 150);
+      // Do not saturate network or thrash cache if active user scrubbing is underway
+      if (cache.size >= MAX_CACHE - 15 || inflight.size >= 4 || queue.length >= 8) {
+        progressiveTimer = window.setTimeout(scheduleProgressivePreload, 200);
         return;
       }
 
@@ -499,7 +500,7 @@ function createSequencePlayer() {
 
   function preloadCritical(onProgress = () => {}) {
     const heroStart = SEQUENCES[0].startFrame ?? 1;
-    const targets = Array.from({ length: 8 }, (_, index) => ({
+    const targets = Array.from({ length: 6 }, (_, index) => ({
       folder: "hero",
       frame: heroStart + index,
     }));
@@ -534,7 +535,7 @@ function createSequencePlayer() {
         } else {
           reportProgress();
         }
-        for (let frame = heroStart + 8; frame <= heroStart + 17; frame += 1) {
+        for (let frame = heroStart + 6; frame <= heroStart + 17; frame += 1) {
           requestFrame("hero", frame, 12);
         }
         seek(currentTime);

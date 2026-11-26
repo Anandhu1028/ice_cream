@@ -85,7 +85,7 @@ export function navigateToStorySection(id) {
     } else {
       const story = document.querySelector(".story-sticky");
       const start = story ? window.scrollY + story.getBoundingClientRect().top : 0;
-      const multiplier = window.innerWidth <= 760 ? 4.2 : 5.6;
+      const multiplier = window.innerWidth <= 760 ? 2.8 : 3.6;
       target = start + window.innerHeight * multiplier * rawProgressForSection(id);
     }
   }

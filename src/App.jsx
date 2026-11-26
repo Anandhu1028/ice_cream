@@ -44,9 +44,9 @@ function App() {
     if (!framesReady || !logoReady) return undefined;
     const introDuration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ? 0
-      : 1200;
+      : 350;
     const elapsed = Date.now() - loaderStartedAtRef.current;
-    const delay = Math.max(0, introDuration - elapsed) + 250;
+    const delay = Math.max(0, introDuration - elapsed);
     const timeoutId = window.setTimeout(() => setReady(true), delay);
     return () => window.clearTimeout(timeoutId);
   }, [framesReady, logoReady]);

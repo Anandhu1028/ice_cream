@@ -69,12 +69,8 @@ export default function Story({
   const reduced = usePrefersReducedMotion();
   const rootRef = useRef(null);
   const introRef = useRef(null);
-  const introTimelineRef = useRef(null);
   const hero2Ref = useRef(null);
   const hero3Ref = useRef(null);
-  const scrollProgressRef = useRef(0);
-  const sequenceOriginRef = useRef(0);
-  const introCompleteRef = useRef(false);
   const finaleScene = SEQUENCES[SEQUENCES.length - 1];
 
   useEffect(() => {
@@ -90,27 +86,20 @@ export default function Story({
   useGSAP(() => {
     const player = getSequencePlayer();
 
-    sequenceOriginRef.current = 0;
     if (reduced) {
       setStorySequenceOrigin(0, true);
-      introCompleteRef.current = true;
       return undefined;
     }
 
     if (!ready) {
       setStorySequenceOrigin(0, false);
-      introCompleteRef.current = false;
       return undefined;
     }
 
-    introCompleteRef.current = true;
     setStorySequenceOrigin(0, true);
     player.seek(INTRO_END_TIME);
     onIntroComplete?.();
-
-    return () => {
-      introCompleteRef.current = false;
-    };
+    return undefined;
   }, {
     scope: rootRef,
     dependencies: [reduced, ready, onIntroComplete],
@@ -132,43 +121,54 @@ export default function Story({
     gsap.set([hero2Ref.current, hero3Ref.current], { opacity: 0, y: 28, visibility: "hidden" });
     gsap.set(introRef.current, { opacity: 1, y: 0, visibility: "visible" });
 
-    let lastHero1Vis = "visible";
-    let lastHero2Vis = "hidden";
-    let lastHero3Vis = "hidden";
+    const lastOverlay = {
+      h1: { opacity: 1, y: 0, vis: "visible" },
+      h2: { opacity: 0, y: 28, vis: "hidden" },
+      h3: { opacity: 0, y: 28, vis: "hidden" },
+    };
+
+    const applyOverlay = (el, prev, next, setOpacity, setY) => {
+      const opacity = Math.round(next.opacity * 1000) / 1000;
+      const y = Math.round(next.y * 10) / 10;
+      const vis = opacity <= 0.005 ? "hidden" : "visible";
+      if (opacity !== prev.opacity) {
+        prev.opacity = opacity;
+        setOpacity(opacity);
+      }
+      if (y !== prev.y) {
+        prev.y = y;
+        setY(y);
+      }
+      if (vis !== prev.vis) {
+        prev.vis = vis;
+        el.style.visibility = vis;
+      }
+    };
 
     const syncTextOverlays = (time) => {
       const hero1Frame = frameAtTime(SEQUENCES[0], time);
       const hero2Frame = frameAtTime(SEQUENCES[1], time);
       const hero3Frame = frameAtTime(SEQUENCES[2], time);
 
-      const h1 = computeHero1State(hero1Frame);
-      setIntroOpacity(h1.opacity);
-      setIntroY(h1.y);
-      const h1Vis = h1.opacity <= 0.005 ? "hidden" : "visible";
-      if (h1Vis !== lastHero1Vis) {
-        lastHero1Vis = h1Vis;
-        introRef.current.style.visibility = h1Vis;
-      }
+      applyOverlay(introRef.current, lastOverlay.h1, computeHero1State(hero1Frame), setIntroOpacity, setIntroY);
 
       const inHero2 = time >= SEQUENCES[1].start && time <= SEQUENCES[1].start + SEQUENCES[1].duration;
-      const h2 = inHero2 ? computeHero2State(hero2Frame) : { opacity: 0, y: 28 };
-      setHero2Opacity(h2.opacity);
-      setHero2Y(h2.y);
-      const h2Vis = h2.opacity <= 0.005 ? "hidden" : "visible";
-      if (h2Vis !== lastHero2Vis) {
-        lastHero2Vis = h2Vis;
-        hero2Ref.current.style.visibility = h2Vis;
-      }
+      applyOverlay(
+        hero2Ref.current,
+        lastOverlay.h2,
+        inHero2 ? computeHero2State(hero2Frame) : { opacity: 0, y: 28 },
+        setHero2Opacity,
+        setHero2Y
+      );
 
       const inHero3 = time >= SEQUENCES[2].start;
-      const h3 = inHero3 ? computeHero3State(hero3Frame) : { opacity: 0, y: 28 };
-      setHero3Opacity(h3.opacity);
-      setHero3Y(h3.y);
-      const h3Vis = h3.opacity <= 0.005 ? "hidden" : "visible";
-      if (h3Vis !== lastHero3Vis) {
-        lastHero3Vis = h3Vis;
-        hero3Ref.current.style.visibility = h3Vis;
-      }
+      applyOverlay(
+        hero3Ref.current,
+        lastOverlay.h3,
+        inHero3 ? computeHero3State(hero3Frame) : { opacity: 0, y: 28 },
+        setHero3Opacity,
+        setHero3Y
+      );
     };
 
     const timeline = gsap.timeline({
@@ -177,7 +177,7 @@ export default function Story({
         id: "scoopy-story",
         trigger: rootRef.current,
         start: "top top",
-        end: () => (window.innerWidth <= 760 ? "+=420%" : "+=560%"),
+        end: () => (window.innerWidth <= 760 ? "+=280%" : "+=360%"),
         pin: true,
         scrub: true,
         anticipatePin: 1,
@@ -189,23 +189,7 @@ export default function Story({
       position: 1,
       duration: STORY_DURATION,
       onUpdate: () => {
-        const rawProgress = playhead.position;
-        scrollProgressRef.current = rawProgress;
-        if (!introCompleteRef.current) {
-          if (rawProgress <= 0) return;
-          introTimelineRef.current?.kill();
-          introTimelineRef.current = null;
-          introCompleteRef.current = true;
-          sequenceOriginRef.current = 0;
-          setStorySequenceOrigin(0);
-          onIntroComplete?.();
-        }
-
-        const origin = sequenceOriginRef.current;
-        const progress = origin >= 1
-          ? 0
-          : Math.max(0, Math.min(1, (rawProgress - origin) / (1 - origin)));
-        const time = INTRO_END_TIME + progress * (STORY_DURATION - INTRO_END_TIME);
+        const time = playhead.position * STORY_DURATION;
         player.seek(time);
         syncTextOverlays(time);
       },
