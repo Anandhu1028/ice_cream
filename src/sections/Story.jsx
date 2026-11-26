@@ -13,18 +13,12 @@ import {
   frameSrc,
   getSequencePlayer,
 } from "../hooks/useImageSequence";
-import {
-  navigateToStorySection,
-  setStorySequenceOrigin,
-} from "./storyNavigation";
+import { setStorySequenceOrigin } from "./storyNavigation";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 ScrollTrigger.config({ ignoreMobileResize: true });
 
-const INTRO_REVEAL_DURATION = 2.05;
-const INTRO_END_TIME =
-  (SEQUENCES[0].duration * 3) /
-  ((SEQUENCES[0].endFrame ?? FRAME_COUNT) - (SEQUENCES[0].startFrame ?? 1));
+const INTRO_END_TIME = 0;
 
 function computeHero1State(frame) {
   if (frame <= 170) return { opacity: 1, y: 0 };
@@ -97,40 +91,24 @@ export default function Story({
     const player = getSequencePlayer();
 
     sequenceOriginRef.current = 0;
-    setStorySequenceOrigin(0, reduced);
     if (reduced) {
+      setStorySequenceOrigin(0, true);
       introCompleteRef.current = true;
       return undefined;
     }
 
-    if (!ready) return undefined;
+    if (!ready) {
+      setStorySequenceOrigin(0, false);
+      introCompleteRef.current = false;
+      return undefined;
+    }
 
-    introCompleteRef.current = false;
-    const introFrame = { time: 0 };
-    const timeline = gsap.timeline({
-      onComplete: () => {
-        introTimelineRef.current = null;
-        const trigger = ScrollTrigger.getById("scoopy-story");
-        const origin = trigger?.progress ?? scrollProgressRef.current;
-        sequenceOriginRef.current = origin;
-        introCompleteRef.current = true;
-        setStorySequenceOrigin(origin);
-        player.seek(INTRO_END_TIME);
-        onIntroComplete?.();
-      },
-    });
-    introTimelineRef.current = timeline;
-
-    timeline.to(introFrame, {
-      time: INTRO_END_TIME,
-      duration: INTRO_REVEAL_DURATION,
-      ease: "none",
-      onUpdate: () => player.seek(introFrame.time),
-    }, 0);
+    introCompleteRef.current = true;
+    setStorySequenceOrigin(0, true);
+    player.seek(INTRO_END_TIME);
+    onIntroComplete?.();
 
     return () => {
-      introTimelineRef.current = null;
-      timeline.kill();
       introCompleteRef.current = false;
     };
   }, {
@@ -262,23 +240,23 @@ export default function Story({
       <section className={`story-sticky${reduced ? " is-reduced" : ""}`} ref={rootRef}>
         <div className="story-canvas" aria-hidden="true">
           {reduced && (
-            <img className="hero-intro__poster" src={frameSrc("hero", SEQUENCES[0].startFrame ?? 42)} alt="" />
+            <img className="hero-intro__poster" src={frameSrc("hero", SEQUENCES[0].startFrame ?? 1)} alt="" />
           )}
           <IceCreamCanvas />
         </div>
         <div className="hero-intro" ref={introRef}>
           <div className="hero-intro__content">
-            <p className="hero-intro__label">THE ART OF ICE CREAM & FALOODA</p>
+            <p className="hero-intro__label">THE ART OF RED VELVET</p>
             <h1 className="hero-intro__heading">
               <span className="hero-intro__heading-line">
-                <span className="hero-intro__line">A Little Scoop</span>
+                <span className="hero-intro__line">Layers Of</span>
               </span>
               <span className="hero-intro__heading-line">
-                <span className="hero-intro__line">Of Happiness.</span>
+                <span className="hero-intro__line">Pure Velvet.</span>
               </span>
             </h1>
             <p className="hero-intro__support">
-              Indulge in the luscious richness of our handcrafted strawberry falooda — made with premium creamy milk, fresh strawberries, sweet basil seeds, and velvety ice cream.
+              Three tender red velvet sponge layers stacked with velvety cream cheese frosting — baked fresh for effortless indulgence.
             </p>
           </div>
         </div>
@@ -288,13 +266,12 @@ export default function Story({
           aria-hidden={reduced}
         >
           <div className="scene-overlay__content scene-overlay__content--about">
-            <p className="scene-overlay__label">OUR HERITAGE & PHILOSOPHY</p>
+            <p className="scene-overlay__label">OUR HERITAGE & CRAFT</p>
             <h2 className="scene-overlay__heading scene-overlay__heading--oneline">
               Born From Passion, Crafted With Love.
             </h2>
             <p className="scene-overlay__support">
-              Crafted in small batches with farm-fresh dairy and real, seasonal ingredients for
-              pure indulgence in every scoop.
+              Enrobed in whipped ivory cream frosting and finished with delicate red velvet crumbs for a rich, melt-in-the-mouth texture.
             </p>
           </div>
         </div>
@@ -304,13 +281,13 @@ export default function Story({
           aria-hidden={reduced}
         >
           <div className="scene-overlay__content">
-            <p className="scene-overlay__label">PURE AND TIMELESS</p>
+            <p className="scene-overlay__label">FINISHED TO PERFECTION</p>
             <h2 className="scene-overlay__heading">
-              <span className="scene-overlay__line">Simply</span>
-              <span className="scene-overlay__line">Vanilla.</span>
+              <span className="scene-overlay__line">Ganache &amp;</span>
+              <span className="scene-overlay__line">Berries.</span>
             </h2>
             <p className="scene-overlay__support">
-              A timeless classic, crafted for moments worth savouring.
+              Crowned with glossy dark chocolate ganache and hand-picked fresh berries — a timeless centerpiece worth savouring.
             </p>
           </div>
         </div>

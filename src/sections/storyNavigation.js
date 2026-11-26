@@ -6,7 +6,7 @@ import {
   frameAtTime,
 } from "../hooks/useImageSequence";
 
-const INTRO_END_TIME = (SEQUENCES[0].duration * 3) / (FRAME_COUNT - 1);
+const INTRO_END_TIME = 0;
 const HERO2_TARGET_FRAME = 175;
 
 let sequenceOriginProgress = 0;
@@ -147,7 +147,7 @@ export function getStoryNavigationState() {
     }
 
     const isDarkBackdrop =
-      time >= SEQUENCES[1].start + 0.06 && time < SEQUENCES[2].start + 0.06;
+      time >= SEQUENCES[1].start + 0.12 && time < SEQUENCES[2].start + 0.12;
 
     return { active, theme: isDarkBackdrop ? "dark" : "light", background: false };
   }

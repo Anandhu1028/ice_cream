@@ -4,39 +4,26 @@ import { publicAsset } from "../utils/publicAsset";
 export const FRAME_COUNT = 190;
 
 export const SEQUENCES = [
-  { id: "hero", folder: "hero", start: 0, duration: 1.08, startFrame: 42, endFrame: 190, background: "#d8a2ac", rgb: [216, 162, 172], focalX: 0.72 },
-  { id: "hero2", folder: "hero2", start: 0.96, duration: 1.1, startFrame: 1, endFrame: 190, background: "#4b281e", rgb: [75, 40, 30], focalX: 0.75 },
-  { id: "hero3", folder: "hero3", start: 1.94, duration: 1.06, startFrame: 1, endFrame: 190, background: "#efe2c7", rgb: [239, 226, 199], focalX: 0.75 },
+  { id: "hero", folder: "hero", start: 0, duration: 1, startFrame: 1, endFrame: 190, background: "#9f646f", focalX: 0.74 },
+  { id: "hero2", folder: "hero2", start: 1, duration: 1, startFrame: 1, endFrame: 190, background: "#5b0b14", focalX: 0.74 },
+  { id: "hero3", folder: "hero3", start: 2, duration: 1, startFrame: 1, endFrame: 190, background: "#d8b08c", focalX: 0.74 },
 ];
 
 export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start + scene.duration));
 
 const IS_MOBILE = typeof window !== "undefined" && window.innerWidth <= 760;
-const MAX_CACHE = IS_MOBILE ? 75 : 180;
-const MAX_INFLIGHT = IS_MOBILE ? 6 : 10;
-const PRELOAD_AHEAD = IS_MOBILE ? 16 : 26;
-const PRELOAD_BEHIND = IS_MOBILE ? 8 : 14;
-
-const CAN_USE_WEBP = (() => {
-  if (typeof document === "undefined") return true;
-  try {
-    const canvas = document.createElement("canvas");
-    return canvas.toDataURL("image/webp").indexOf("data:image/webp") === 0;
-  } catch {
-    return true;
-  }
-})();
+const MAX_CACHE = IS_MOBILE ? 65 : 150;
+const MAX_INFLIGHT = IS_MOBILE ? 6 : 8;
+const PRELOAD_AHEAD = IS_MOBILE ? 16 : 24;
+const PRELOAD_BEHIND = IS_MOBILE ? 8 : 12;
 
 const cache = new Map();
 const failed = new Set();
 const warned = new Set();
 const lru = [];
 
-export function frameSrc(folder, frame, usePng = false) {
+export function frameSrc(folder, frame) {
   const pad = String(frame).padStart(6, "0");
-  if (!usePng && CAN_USE_WEBP) {
-    return publicAsset(`frames-webp/${folder}/frame_${pad}.webp`);
-  }
   return publicAsset(`frames/${folder}/frame_${pad}.png`);
 }
 
@@ -55,29 +42,11 @@ export function frameAtTime(scene, time) {
 
 function samplesAtTime(time) {
   const boundedTime = Math.max(0, Math.min(STORY_DURATION, time));
-
-  for (let index = 0; index < SEQUENCES.length - 1; index += 1) {
-    const previous = SEQUENCES[index];
-    const next = SEQUENCES[index + 1];
-    const transitionStart = next.start;
-    const transitionEnd = previous.start + previous.duration;
-
-    if (boundedTime >= transitionStart && boundedTime <= transitionEnd) {
-      return {
-        samples: [
-          { scene: previous, frame: frameAtTime(previous, boundedTime) },
-          { scene: next, frame: frameAtTime(next, boundedTime) },
-        ],
-        mix: (boundedTime - transitionStart) / (transitionEnd - transitionStart),
-      };
-    }
-  }
-
   let scene = SEQUENCES[0];
   for (const candidate of SEQUENCES) {
     if (boundedTime >= candidate.start) scene = candidate;
   }
-  return { samples: [{ scene, frame: frameAtTime(scene, boundedTime) }], mix: 0 };
+  return { samples: [{ scene, frame: frameAtTime(scene, boundedTime) }] };
 }
 
 function createSequencePlayer() {
@@ -91,7 +60,6 @@ function createSequencePlayer() {
   let currentTime = 0;
   let lastSeekTime = -1;
   let lastPaintKey = "";
-  let lastPaintScene = "";
   let lastPreloadSignature = "";
   let lastGood = null;
   let raf = 0;
@@ -110,11 +78,6 @@ function createSequencePlayer() {
     for (let f = startFrame; f <= endFrame; f += 1) {
       allFrameTargets.push({ folder: seq.folder, frame: f });
     }
-  }
-
-  function isCriticalFrame(job) {
-    const heroStart = SEQUENCES[0].startFrame ?? 1;
-    return criticalPreloadCount > 0 && job.folder === "hero" && job.frame >= heroStart && job.frame < heroStart + 8;
   }
 
   function touch(key) {
@@ -199,13 +162,6 @@ function createSequencePlayer() {
     ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
   }
 
-  function mixColor(from, to, amount) {
-    const channels = from.rgb.map((value, index) =>
-      Math.round(value + (to.rgb[index] - value) * amount)
-    );
-    return `rgb(${channels.join(",")})`;
-  }
-
   function requestPaint() {
     if (attached && !raf) raf = requestAnimationFrame(flushSeek);
   }
@@ -216,80 +172,30 @@ function createSequencePlayer() {
     job.resolve(value);
   }
 
-  function cancelActiveJob(job) {
-    if (job.cancelled) return;
-    job.cancelled = true;
-    if (inflight.get(job.key) === job) inflight.delete(job.key);
-    if (job.img) {
-      job.img.onload = null;
-      job.img.onerror = null;
-      job.img.removeAttribute("src");
-    }
-    resolveJob(job, null);
-  }
-
   function paint() {
     if (!attached || !ctx || !canvas) return;
 
-    const resolved = current.samples.map((sample) => ({
-      sample,
-      found: nearestImage(sample),
-    }));
-    const transition = resolved.length === 2 && current.mix > 0 && current.mix < 1;
-    const activeIndex = resolved.length === 2 && current.mix >= 1 ? 1 : 0;
-    const visible = transition ? resolved : [resolved[activeIndex]];
-    const missing = visible.some(({ found }) => !found);
+    const sample = current.samples[0];
+    const found = nearestImage(sample);
 
-    if (missing) {
+    if (!found) {
       if (!lastGood) {
-        ctx.fillStyle = current.samples[activeIndex].scene.background;
+        ctx.fillStyle = sample.scene.background;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        lastPaintScene = current.samples[activeIndex].scene.folder;
         return;
       }
       if (lastGood.key === lastPaintKey) return;
       ctx.globalAlpha = 1;
-      ctx.fillStyle = lastGood.sample.scene.background;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
       drawCover(lastGood.img, lastGood.sample.scene);
       lastPaintKey = lastGood.key;
-      lastPaintScene = lastGood.sample.scene.folder;
       return;
     }
 
-    if (transition) {
-      const first = resolved[0].found;
-      const second = resolved[1].found;
-      const paintKey = `${first.key}|${second.key}|${Math.round(current.mix * 1000)}`;
-      if (paintKey === lastPaintKey) return;
-
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = mixColor(resolved[0].sample.scene, resolved[1].sample.scene, current.mix);
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.globalAlpha = 1;
-      drawCover(first.img, resolved[0].sample.scene);
-      ctx.globalAlpha = current.mix;
-      drawCover(second.img, resolved[1].sample.scene);
-      lastGood = {
-        sample: resolved[current.mix >= 0.5 ? 1 : 0].sample,
-        ...(current.mix >= 0.5 ? second : first),
-      };
-      lastPaintScene = "";
-      lastPaintKey = paintKey;
-    } else {
-      const { sample, found } = resolved[activeIndex];
-      if (found.key === lastPaintKey) return;
-      if (lastPaintScene !== sample.scene.folder) {
-        ctx.fillStyle = sample.scene.background;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-      ctx.globalAlpha = 1;
-      drawCover(found.img, sample.scene);
-      lastGood = { sample, ...found };
-      lastPaintScene = sample.scene.folder;
-      lastPaintKey = found.key;
-    }
+    if (found.key === lastPaintKey) return;
     ctx.globalAlpha = 1;
+    drawCover(found.img, sample.scene);
+    lastGood = { sample, ...found };
+    lastPaintKey = found.key;
   }
 
   function pump() {
@@ -355,14 +261,7 @@ function createSequencePlayer() {
         }
       };
 
-      img.onerror = () => {
-        if (!job.usedFallback) {
-          job.usedFallback = true;
-          img.src = frameSrc(job.folder, job.frame, true);
-          return;
-        }
-        fail();
-      };
+      img.onerror = fail;
 
       img.src = frameSrc(job.folder, job.frame);
     }
@@ -486,14 +385,20 @@ function createSequencePlayer() {
       }
     }
 
-    // Near scene transitions, preload initial frames of adjacent scene
+    // Near scene transitions, preload initial frames of upcoming scene and trailing frames of previous scene
     for (let index = 0; index < SEQUENCES.length - 1; index += 1) {
       const scene = SEQUENCES[index];
       const nextScene = SEQUENCES[index + 1];
       const nextStart = nextScene.startFrame ?? 1;
-      if (time >= scene.start + scene.duration * 0.7 && time < nextScene.start) {
-        for (let offset = 0; offset < 10; offset += 1) {
+      if (time >= scene.start + scene.duration * 0.55 && time < nextScene.start) {
+        for (let offset = 0; offset < 18; offset += 1) {
           addTarget(nextScene.folder, nextStart + offset, PRELOAD_AHEAD + PRELOAD_BEHIND + offset + 1);
+        }
+      }
+      const prevEnd = scene.endFrame ?? FRAME_COUNT;
+      if (time >= nextScene.start && time <= nextScene.start + nextScene.duration * 0.25) {
+        for (let offset = 0; offset < 12; offset += 1) {
+          addTarget(scene.folder, prevEnd - offset, PRELOAD_AHEAD + PRELOAD_BEHIND + offset + 1);
         }
       }
     }
@@ -569,7 +474,6 @@ function createSequencePlayer() {
       canvas.width = width;
       canvas.height = height;
       lastPaintKey = "";
-      lastPaintScene = "";
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
     }

@@ -576,7 +576,7 @@
   height: 100svh;
   z-index: 2;
   overflow: hidden;
-  background: #f6c3d2;
+  background: #9f646f;
 }
 
 .story-sticky.is-reduced {
@@ -634,24 +634,26 @@
 
 .hero-intro__content {
   width: min(580px, 48vw);
-  color: #542c37;
+  color: #fff8f9;
 }
 
 .hero-intro__label {
   margin-bottom: 14px;
-  color: #7d3345;
+  color: #fce4ea;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.22em;
+  text-shadow: 0 1px 10px rgba(58, 20, 28, 0.35);
 }
 
 .hero-intro__heading {
-  color: #4a1827;
+  color: #fff8f9;
   font-family: var(--font-display);
   font-size: clamp(52px, 5.2vw, 84px);
   font-weight: 400;
   letter-spacing: -0.04em;
   line-height: 1.02;
+  text-shadow: 0 3px 24px rgba(58, 20, 28, 0.4);
 }
 
 .hero-intro__heading-line {
@@ -668,9 +670,10 @@
 .hero-intro__support {
   max-width: 480px;
   margin-top: 18px;
-  color: #6a3443;
+  color: #f9e6ea;
   font-size: clamp(14px, 1.1vw, 16.5px);
   line-height: 1.62;
+  text-shadow: 0 2px 12px rgba(58, 20, 28, 0.35);
 }
 
 .hero-intro__features {
@@ -806,7 +809,7 @@
   margin-top: -100vh;
   margin-top: -100svh;
   overflow: hidden;
-  background: #efe2c7;
+  background: #d8b08c;
 }
 
 .film-finale img,
@@ -1709,19 +1712,19 @@
 }
 
 .scene-overlay--vanilla .scene-overlay__label {
-  color: #d8e5b8;
+  color: #6e442c;
   letter-spacing: 0.24em;
-  text-shadow: 0 1px 12px rgba(25, 15, 10, 0.4);
+  text-shadow: none;
 }
 
 .scene-overlay--vanilla .scene-overlay__heading {
-  color: #fffbf5;
-  text-shadow: 0 3px 25px rgba(25, 15, 10, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
+  color: #3b1f14;
+  text-shadow: none;
 }
 
 .scene-overlay--vanilla .scene-overlay__support {
-  color: #ede4d8;
-  text-shadow: 0 2px 14px rgba(25, 15, 10, 0.45);
+  color: #563425;
+  text-shadow: none;
 }
 
 .scene-overlay__content--about {
@@ -1825,7 +1828,7 @@
   .scene-overlay--chocolate .scene-overlay__content {
     padding: 18px 20px;
     border-radius: 20px;
-    background: rgba(48, 22, 15, 0.78);
+    background: rgba(56, 6, 12, 0.8);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(247, 197, 182, 0.2);
@@ -1834,10 +1837,10 @@
   .scene-overlay--vanilla .scene-overlay__content {
     padding: 18px 20px;
     border-radius: 20px;
-    background: rgba(38, 22, 15, 0.78);
+    background: rgba(247, 232, 214, 0.86);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(216, 229, 184, 0.2);
+    border: 1px solid rgba(110, 68, 44, 0.16);
   }
 
   .scene-overlay__label {
