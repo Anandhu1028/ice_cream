@@ -13,18 +13,32 @@ export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start +
 
 const IS_MOBILE = typeof window !== "undefined" && window.innerWidth <= 760;
 const MAX_CACHE = IS_MOBILE ? 65 : 150;
-const MAX_INFLIGHT = IS_MOBILE ? 6 : 8;
+const MAX_INFLIGHT = IS_MOBILE ? 4 : 6;
 const PRELOAD_AHEAD = IS_MOBILE ? 16 : 24;
 const PRELOAD_BEHIND = IS_MOBILE ? 8 : 12;
+const FRAME_ASSET_VERSION = "rv-20261127-q82";
+
+const CAN_USE_WEBP = (() => {
+  if (typeof document === "undefined") return true;
+  try {
+    const canvas = document.createElement("canvas");
+    return canvas.toDataURL("image/webp").indexOf("data:image/webp") === 0;
+  } catch {
+    return true;
+  }
+})();
 
 const cache = new Map();
 const failed = new Set();
 const warned = new Set();
 const lru = [];
 
-export function frameSrc(folder, frame) {
+export function frameSrc(folder, frame, usePng = false) {
   const pad = String(frame).padStart(6, "0");
-  return publicAsset(`frames/${folder}/frame_${pad}.png`);
+  if (!usePng && CAN_USE_WEBP) {
+    return `${publicAsset(`frames-webp/${folder}/frame_${pad}.webp`)}?v=${FRAME_ASSET_VERSION}`;
+  }
+  return `${publicAsset(`frames/${folder}/frame_${pad}.png`)}?v=${FRAME_ASSET_VERSION}`;
 }
 
 export const POSTERS = {
@@ -262,7 +276,14 @@ function createSequencePlayer() {
         }
       };
 
-      img.onerror = fail;
+      img.onerror = () => {
+        if (!job.usedFallback) {
+          job.usedFallback = true;
+          img.src = frameSrc(job.folder, job.frame, true);
+          return;
+        }
+        fail();
+      };
 
       img.src = frameSrc(job.folder, job.frame);
     }
