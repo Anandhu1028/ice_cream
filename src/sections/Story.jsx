@@ -179,7 +179,7 @@ export default function Story({
         start: "top top",
         end: () => (window.innerWidth <= 760 ? "+=280%" : "+=360%"),
         pin: true,
-        scrub: true,
+        scrub: 0.18,
         anticipatePin: 1,
         invalidateOnRefresh: true,
       },

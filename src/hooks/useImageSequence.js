@@ -4,7 +4,7 @@ import { publicAsset } from "../utils/publicAsset";
 export const FRAME_COUNT = 190;
 
 export const SEQUENCES = [
-  { id: "hero", folder: "hero", start: 0, duration: 1, startFrame: 1, endFrame: 190, background: "#9f646f", focalX: 0.74 },
+  { id: "hero", folder: "hero", start: 0, duration: 1, startFrame: 42, endFrame: 190, background: "#9f646f", focalX: 0.74 },
   { id: "hero2", folder: "hero2", start: 1, duration: 1, startFrame: 1, endFrame: 190, background: "#5b0b14", focalX: 0.74 },
   { id: "hero3", folder: "hero3", start: 2, duration: 1, startFrame: 1, endFrame: 190, background: "#d8b08c", focalX: 0.74 },
 ];
@@ -12,10 +12,10 @@ export const SEQUENCES = [
 export const STORY_DURATION = Math.max(...SEQUENCES.map((scene) => scene.start + scene.duration));
 
 const IS_MOBILE = typeof window !== "undefined" && window.innerWidth <= 760;
-const MAX_CACHE = IS_MOBILE ? 65 : 150;
-const MAX_INFLIGHT = IS_MOBILE ? 4 : 6;
-const PRELOAD_AHEAD = IS_MOBILE ? 16 : 24;
-const PRELOAD_BEHIND = IS_MOBILE ? 8 : 12;
+const MAX_CACHE = IS_MOBILE ? 360 : 600;
+const MAX_INFLIGHT = IS_MOBILE ? 10 : 18;
+const PRELOAD_AHEAD = IS_MOBILE ? 18 : 28;
+const PRELOAD_BEHIND = IS_MOBILE ? 8 : 14;
 const FRAME_ASSET_VERSION = "rv-20261127-q82";
 
 const CAN_USE_WEBP = (() => {
@@ -82,16 +82,22 @@ function createSequencePlayer() {
   let requestOrder = 0;
   let criticalPreloadCount = 0;
 
-  // Progressive preloader state: warm key scene anchor frames without thrashing LRU cache
+  // Progressive preloader state: load keyframes across all scenes first (stride 4, then 2, then 1)
   let progressiveIndex = 0;
   let progressiveTimer = 0;
   const allFrameTargets = [];
-  for (const seq of SEQUENCES) {
-    const startFrame = seq.startFrame ?? 1;
-    const endFrame = seq.endFrame ?? FRAME_COUNT;
-    const anchorEnd = Math.min(endFrame, startFrame + 24);
-    for (let f = startFrame; f <= anchorEnd; f += 1) {
-      allFrameTargets.push({ folder: seq.folder, frame: f });
+  const addedTargets = new Set();
+  for (const stride of [4, 2, 1]) {
+    for (const seq of SEQUENCES) {
+      const startFrame = seq.startFrame ?? 1;
+      const endFrame = seq.endFrame ?? FRAME_COUNT;
+      for (let f = startFrame; f <= endFrame; f += stride) {
+        const key = `${seq.folder}:${f}`;
+        if (!addedTargets.has(key)) {
+          addedTargets.add(key);
+          allFrameTargets.push({ folder: seq.folder, frame: f });
+        }
+      }
     }
   }
 
@@ -329,9 +335,9 @@ function createSequencePlayer() {
     requestOrder += 1;
 
     // Prune stale queue entries only if queue is excessively large
-    if (queue.length > 60) {
+    if (queue.length > 100) {
       queue.sort((a, b) => a.priority - b.priority || a.order - b.order);
-      queue.splice(40).forEach((job) => {
+      queue.splice(70).forEach((job) => {
         if (job.priority > 20) {
           job.cancelled = true;
           resolveJob(job, null);
@@ -346,14 +352,15 @@ function createSequencePlayer() {
     if (progressiveTimer) return;
     const run = () => {
       progressiveTimer = 0;
-      // Do not saturate network or thrash cache if active user scrubbing is underway
-      if (cache.size >= MAX_CACHE - 15 || inflight.size >= 4 || queue.length >= 8) {
-        progressiveTimer = window.setTimeout(scheduleProgressivePreload, 200);
+      // Yield to active scrubbing if queue/inflight is busy
+      if (inflight.size >= MAX_INFLIGHT - 2 || queue.length >= 20) {
+        progressiveTimer = window.setTimeout(scheduleProgressivePreload, 80);
         return;
       }
 
       let enqueued = 0;
-      while (progressiveIndex < allFrameTargets.length && enqueued < 4) {
+      const batchSize = IS_MOBILE ? 6 : 10;
+      while (progressiveIndex < allFrameTargets.length && enqueued < batchSize) {
         const target = allFrameTargets[progressiveIndex];
         progressiveIndex += 1;
         const key = `${target.folder}:${target.frame}`;
@@ -365,17 +372,17 @@ function createSequencePlayer() {
 
       if (progressiveIndex < allFrameTargets.length) {
         if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-          progressiveTimer = window.requestIdleCallback(scheduleProgressivePreload, { timeout: 200 });
+          progressiveTimer = window.requestIdleCallback(scheduleProgressivePreload, { timeout: 120 });
         } else {
-          progressiveTimer = window.setTimeout(scheduleProgressivePreload, 35);
+          progressiveTimer = window.setTimeout(scheduleProgressivePreload, 16);
         }
       }
     };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      progressiveTimer = window.requestIdleCallback(run, { timeout: 200 });
+      progressiveTimer = window.requestIdleCallback(run, { timeout: 120 });
     } else {
-      progressiveTimer = window.setTimeout(run, 50);
+      progressiveTimer = window.setTimeout(run, 16);
     }
   }
 
@@ -521,7 +528,7 @@ function createSequencePlayer() {
 
   function preloadCritical(onProgress = () => {}) {
     const heroStart = SEQUENCES[0].startFrame ?? 1;
-    const targets = Array.from({ length: 6 }, (_, index) => ({
+    const targets = Array.from({ length: 16 }, (_, index) => ({
       folder: "hero",
       frame: heroStart + index,
     }));
@@ -556,7 +563,7 @@ function createSequencePlayer() {
         } else {
           reportProgress();
         }
-        for (let frame = heroStart + 6; frame <= heroStart + 17; frame += 1) {
+        for (let frame = heroStart + 16; frame <= heroStart + 32; frame += 1) {
           requestFrame("hero", frame, 12);
         }
         seek(currentTime);
